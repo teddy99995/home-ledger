@@ -30,33 +30,24 @@ const APP_ID = 'our-home-ledger-2254a';
 
 // --- 分類與顏色設定 ---
 const EXPENSE_CATEGORIES = [
-  { id: 'food', name: '餐飲', icon: '🍽️', color: '#D4A373' }, 
-  { id: 'shopping', name: '購物', icon: '🛍️', color: '#E9C46A' },
-  { id: 'transport', name: '交通', icon: '🚗', color: '#A3B18A' }, 
-  { id: 'home', name: '居家', icon: '🏠', color: '#CCD5AE' },
-  { id: 'entertainment', name: '娛樂', icon: '🍿', color: '#F4A261' }, 
-  { id: 'other_exp', name: '其他', icon: '✨', color: '#EAE0D5' },
+  { id: 'food', name: '餐飲', icon: '🍽️', color: '#D4A373' }, { id: 'shopping', name: '購物', icon: '🛍️', color: '#E9C46A' },
+  { id: 'transport', name: '交通', icon: '🚗', color: '#A3B18A' }, { id: 'home', name: '居家', icon: '🏠', color: '#CCD5AE' },
+  { id: 'entertainment', name: '娛樂', icon: '🍿', color: '#F4A261' }, { id: 'other_exp', name: '其他', icon: '✨', color: '#EAE0D5' },
 ];
 const STUDIO_EXPENSE_CATEGORIES = [
-  { id: 'software', name: '軟體訂閱', icon: '💻', color: '#4F46E5' }, 
-  { id: 'equipment', name: '器材', icon: '📷', color: '#6366F1' },
-  { id: 'marketing', name: '行銷廣告', icon: '📢', color: '#8B5CF6' }, 
-  { id: 'other_studio', name: '雜支', icon: '✨', color: '#C7D2FE' },
+  { id: 'software', name: '軟體訂閱', icon: '💻', color: '#4F46E5' }, { id: 'equipment', name: '器材', icon: '📷', color: '#6366F1' },
+  { id: 'marketing', name: '行銷廣告', icon: '📢', color: '#8B5CF6' }, { id: 'other_studio', name: '雜支', icon: '✨', color: '#C7D2FE' },
 ];
 const INCOME_CATEGORIES = [
-  { id: 'salary', name: '薪資', icon: '💰', color: '#A3B18A' }, 
-  { id: 'investment', name: '投資', icon: '📈', color: '#D4A373' },
-  { id: 'brand', name: '品牌收入', icon: '💼', color: '#F4A261' }, 
-  { id: 'other_inc', name: '其他', icon: '✨', color: '#EAE0D5' },
+  { id: 'salary', name: '薪資', icon: '💰', color: '#A3B18A' }, { id: 'investment', name: '投資', icon: '📈', color: '#D4A373' },
+  { id: 'brand', name: '品牌收入', icon: '💼', color: '#F4A261' }, { id: 'other_inc', name: '其他', icon: '✨', color: '#EAE0D5' },
 ];
 
 const getLocalYYYYMM = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 const getLocalYYYYMMDD = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const calculateDaysDiff = (targetDateStr) => {
-  const target = new Date(targetDateStr); 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); 
-  target.setHours(0, 0, 0, 0);
+  const target = new Date(targetDateStr); const today = new Date();
+  today.setHours(0, 0, 0, 0); target.setHours(0, 0, 0, 0);
   return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
 };
 
@@ -73,17 +64,8 @@ export default function App() {
   const [events, setEvents] = useState([]);
   const [globalTags, setGlobalTags] = useState([]); 
   const [appSettings, setAppSettings] = useState({ 
-    monthlyBudget: 50000, 
-    husbandBarcode: '', 
-    wifeBarcode: '', 
-    husbandCert: '', 
-    wifeCert: '', 
-    enableRollover: true, 
-    autoSyncInvoices: true, 
-    notifyLargeExpense: true, 
-    largeExpenseThreshold: 3000, 
-    notifyBillDue: true, 
-    notifyEvents: true
+    monthlyBudget: 50000, husbandBarcode: '', wifeBarcode: '', husbandCert: '', wifeCert: '', 
+    enableRollover: true, autoSyncInvoices: true, notifyLargeExpense: true, largeExpenseThreshold: 3000, notifyBillDue: true, notifyEvents: true
   });
 
   // --- UI States ---
@@ -106,161 +88,90 @@ export default function App() {
 
   const syncAttempted = useRef(false);
 
-  const showToast = (msg, type = 'success', duration = 3000) => { 
-    setToast({ msg, type }); 
-    if (duration > 0) setTimeout(() => setToast(null), duration); 
-  };
+  const showToast = (msg, type = 'success', duration = 3000) => { setToast({ msg, type }); if (duration > 0) setTimeout(() => setToast(null), duration); };
 
   useEffect(() => {
-    const initAuth = async () => { 
-      try { 
-        await signInAnonymously(auth); 
-      } catch (err) { 
-        showToast("登入失敗", "error"); 
-      } 
-    };
+    const initAuth = async () => { try { await signInAnonymously(auth); } catch (err) { showToast("登入失敗", "error"); } };
     initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => { 
-      setUser(currentUser); 
-      if (!currentUser) setIsLoading(false); 
-    });
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => { setUser(currentUser); if (!currentUser) setIsLoading(false); });
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     if (!user) return;
-
     const unsubTx = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_ledger'), (snap) => {
-      const data = []; 
-      snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)); 
-      setAllTransactions(data); 
-      setIsLoading(false);
+      const data = []; snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+      data.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)); setAllTransactions(data); setIsLoading(false);
     });
-
     const accRef = collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_accounts');
     const unsubAcc = onSnapshot(accRef, (snap) => {
       if (snap.empty) {
-        const defaults = [
-          { id: 'acc_joint', name: '共同帳戶', type: 'joint', icon: '🏦' }, 
-          { id: 'acc_h_bank', name: '老公帳戶', type: 'husband', icon: '💳' }, 
-          { id: 'acc_w_bank', name: '老婆帳戶', type: 'wife', icon: '💳' }, 
-          { id: 'acc_studio', name: '品牌工作室', type: 'brand', icon: '💼' }
-        ];
+        const defaults = [{ id: 'acc_joint', name: '共同帳戶', type: 'joint', icon: '🏦' }, { id: 'acc_h_bank', name: '老公帳戶', type: 'husband', icon: '💳' }, { id: 'acc_w_bank', name: '老婆帳戶', type: 'wife', icon: '💳' }, { id: 'acc_studio', name: '品牌工作室', type: 'brand', icon: '💼' }];
         defaults.forEach(d => setDoc(doc(accRef, d.id), { ...d, createdAt: serverTimestamp() }));
       } else {
-        const data = []; 
-        snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-        data.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)); 
-        setAccounts(data);
+        const data = []; snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+        data.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)); setAccounts(data);
       }
     });
-
     const unsubBills = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_bills'), (snap) => {
-      const data = []; 
-      snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => a.dueDate - b.dueDate); 
-      setBills(data);
+      const data = []; snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+      data.sort((a, b) => a.dueDate - b.dueDate); setBills(data);
     });
-
     const unsubNotes = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_notes'), (snap) => {
-      const data = []; 
-      snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0)); 
-      setNotes(data);
+      const data = []; snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+      data.sort((a, b) => (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0)); setNotes(data);
     });
-
     const unsubShopping = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_shopping'), (snap) => {
-      const data = []; 
-      snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => { 
-        if (a.completed === b.completed) return (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0); 
-        return a.completed ? 1 : -1; 
-      }); 
-      setShoppingList(data);
+      const data = []; snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+      data.sort((a, b) => { if (a.completed === b.completed) return (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0); return a.completed ? 1 : -1; }); setShoppingList(data);
     });
-
     const unsubGoals = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_goals'), (snap) => {
-      const data = []; 
-      snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)); 
-      setGoals(data);
+      const data = []; snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+      data.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)); setGoals(data);
     });
-
     const unsubEvents = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_events'), (snap) => {
-      const data = []; 
-      snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => { 
-        const dA = calculateDaysDiff(a.date); 
-        const dB = calculateDaysDiff(b.date); 
-        if (dA >= 0 && dB >= 0) return dA - dB; 
-        if (dA < 0 && dB < 0) return dB - dA; 
-        return dA >= 0 ? -1 : 1; 
-      }); 
-      setEvents(data);
+      const data = []; snap.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+      data.sort((a, b) => { const dA = calculateDaysDiff(a.date); const dB = calculateDaysDiff(b.date); if (dA >= 0 && dB >= 0) return dA - dB; if (dA < 0 && dB < 0) return dB - dA; return dA >= 0 ? -1 : 1; }); setEvents(data);
     });
-
     const unsubTags = onSnapshot(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_tags', 'main'), (docSnap) => {
-      if (docSnap.exists()) setGlobalTags(docSnap.data().tags || []); 
-      else setGlobalTags([]);
+      if (docSnap.exists()) setGlobalTags(docSnap.data().tags || []); else setGlobalTags([]);
     });
-
     const unsubSettings = onSnapshot(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_settings', 'main'), (docSnap) => {
       if (docSnap.exists()) setAppSettings(prev => ({ ...prev, ...docSnap.data() }));
     });
 
-    return () => { 
-      unsubTx(); unsubAcc(); unsubBills(); unsubNotes(); unsubShopping(); 
-      unsubGoals(); unsubEvents(); unsubTags(); unsubSettings(); 
-    };
-  }, [user]);const activeNotifications = useMemo(() => {
+    return () => { unsubTx(); unsubAcc(); unsubBills(); unsubNotes(); unsubShopping(); unsubGoals(); unsubEvents(); unsubTags(); unsubSettings(); };
+  }, [user]);
+
+  const activeNotifications = useMemo(() => {
     const alerts = [];
     const today = new Date();
-    
     if (appSettings.notifyBillDue) {
       bills.forEach(b => {
         if (!b.isPaid) {
           const dueDiff = b.dueDate - today.getDate();
           if (dueDiff >= 0 && dueDiff <= 3) {
-            alerts.push({ 
-              id: `b_${b.id}`, type: 'bill', icon: b.icon, 
-              title: '帳單快到期囉', 
-              desc: `${b.name} ($${b.amount.toLocaleString()}) 將在 ${dueDiff === 0 ? '今天' : `${dueDiff} 天後`}到期。`, 
-              time: '系統提醒' 
-            });
+            alerts.push({ id: `b_${b.id}`, type: 'bill', icon: b.icon, title: '帳單快到期囉', desc: `${b.name} ($${b.amount.toLocaleString()}) 將在 ${dueDiff === 0 ? '今天' : `${dueDiff} 天後`}到期。`, time: '系統提醒' });
           }
         }
       });
     }
-
     if (appSettings.notifyEvents) {
       events.forEach(e => {
         const diff = calculateDaysDiff(e.date);
         if (diff >= 0 && diff <= 3) {
-          alerts.push({ 
-            id: `e_${e.id}`, type: 'event', icon: e.icon, 
-            title: diff === 0 ? '就是今天！' : '重要日子快到了', 
-            desc: `「${e.title}」${diff === 0 ? '今天登場' : `還有 ${diff} 天`}。`, 
-            time: '系統提醒' 
-          });
+          alerts.push({ id: `e_${e.id}`, type: 'event', icon: e.icon, title: diff === 0 ? '就是今天！' : '重要日子快到了', desc: `「${e.title}」${diff === 0 ? '今天登場' : `還有 ${diff} 天`}。`, time: '系統提醒' });
         }
       });
     }
-
     if (appSettings.notifyLargeExpense) {
       const threshold = appSettings.largeExpenseThreshold || 3000;
       allTransactions.slice(0, 15).forEach(tx => {
         if (tx.type === 'expense' && tx.amount >= threshold) {
-          alerts.push({ 
-            id: `tx_${tx.id}`, type: 'tx', icon: '💸', 
-            title: '大額消費提醒', 
-            desc: `${tx.payer === 'husband' ? '老公' : tx.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${tx.amount.toLocaleString()} 的 ${tx.category}。`, 
-            time: tx.date 
-          });
+          alerts.push({ id: `tx_${tx.id}`, type: 'tx', icon: '💸', title: '大額消費提醒', desc: `${tx.payer === 'husband' ? '老公' : tx.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${tx.amount.toLocaleString()} 的 ${tx.category}。`, time: tx.date });
         }
       });
     }
-    
     return alerts;
   }, [bills, events, allTransactions, appSettings]);
 
@@ -271,16 +182,12 @@ export default function App() {
     const s = { totalExpense: 0, totalIncome: 0, categoryData: {}, husbandOwes: 0, wifeOwes: 0, husbandPaidForSettle: 0, wifePaidForSettle: 0 };
     txList.forEach(tx => {
       if (tx.type === 'expense') {
-        s.totalExpense += tx.amount; 
-        s.categoryData[tx.category] = (s.categoryData[tx.category] || 0) + tx.amount;
+        s.totalExpense += tx.amount; s.categoryData[tx.category] = (s.categoryData[tx.category] || 0) + tx.amount;
         if (tx.payer === 'husband') s.husbandPaidForSettle += tx.amount;
         if (tx.payer === 'wife') s.wifePaidForSettle += tx.amount;
         if (tx.split === 'husband') s.husbandOwes += tx.amount;
         else if (tx.split === 'wife') s.wifeOwes += tx.amount;
-        else if (tx.split === 'half') { 
-          s.husbandOwes += tx.amount / 2; 
-          s.wifeOwes += tx.amount / 2; 
-        }
+        else if (tx.split === 'half') { s.husbandOwes += tx.amount / 2; s.wifeOwes += tx.amount / 2; }
       } else {
         s.totalIncome += tx.amount;
       }
@@ -308,14 +215,11 @@ export default function App() {
   const tabStats = useMemo(() => calculateStats(statsView === 'month' ? monthlyTx : yearlyTx), [monthlyTx, yearlyTx, statsView]);
 
   const rolloverData = useMemo(() => {
-    if (!appSettings.enableRollover || workspace === 'studio') {
-      return { enabled: false, amount: 0, effectiveBudget: appSettings.monthlyBudget };
-    }
+    if (!appSettings.enableRollover || workspace === 'studio') return { enabled: false, amount: 0, effectiveBudget: appSettings.monthlyBudget };
     const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
     const prevMonthStr = getLocalYYYYMM(prevDate);
     const prevMonthlyTx = baseWorkspaceTx.filter(tx => tx.month === prevMonthStr);
     const prevExpense = prevMonthlyTx.reduce((acc, curr) => curr.type === 'expense' ? acc + curr.amount : acc, 0);
-    
     let rolloverAmount = 0;
     if (prevExpense < appSettings.monthlyBudget && prevMonthlyTx.length > 0) {
       rolloverAmount = appSettings.monthlyBudget - prevExpense;
@@ -325,22 +229,15 @@ export default function App() {
 
   const totalAssets = useMemo(() => { 
     let balance = 0; 
-    allTransactions.forEach(tx => { 
-      if (tx.type === 'expense') balance -= tx.amount; 
-      else balance += tx.amount; 
-    }); 
+    allTransactions.forEach(tx => { if (tx.type === 'expense') balance -= tx.amount; else balance += tx.amount; }); 
     return balance; 
   }, [allTransactions]);
 
   const accBalances = useMemo(() => { 
-    const balances = {}; 
-    accounts.forEach(a => balances[a.id] = 0); 
+    const balances = {}; accounts.forEach(a => balances[a.id] = 0); 
     allTransactions.forEach(tx => { 
-      if (tx.type === 'expense') { 
-        if (balances[tx.accountId] !== undefined) balances[tx.accountId] -= tx.amount; 
-      } else { 
-        if (balances[tx.accountId] !== undefined) balances[tx.accountId] += tx.amount; 
-      } 
+      if (tx.type === 'expense') { if (balances[tx.accountId] !== undefined) balances[tx.accountId] -= tx.amount; } 
+      else { if (balances[tx.accountId] !== undefined) balances[tx.accountId] += tx.amount; } 
     }); 
     return balances; 
   }, [allTransactions, accounts]);
@@ -362,155 +259,25 @@ export default function App() {
     return { status: 'settled' };
   }, [tabStats]);
 
-  const handleAddTx = async (newTx) => { 
-    try { 
-      await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_ledger'), { ...newTx, date: getLocalYYYYMMDD(new Date(currentDate)), month: getLocalYYYYMM(new Date(currentDate)), createdAt: serverTimestamp(), createdBy: user.uid }); 
-      setModalType(null); 
-      showToast("記帳成功！"); 
-    } catch (err) { showToast("網路錯誤", "error"); } 
-  };
-
-  const handleDeleteTx = (id) => { 
-    setConfirmDialog({ 
-      message: '確定要刪除這筆紀錄嗎？', 
-      onConfirm: async () => { 
-        try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_ledger', id)); showToast("紀錄已刪除"); } 
-        catch (err) { showToast("刪除失敗", "error"); } 
-        setConfirmDialog(null); 
-      }
-    }); 
-  };
-
-  const handleAddGlobalTag = async (tagName) => { 
-    if (!tagName.trim() || globalTags.includes(tagName)) return; 
-    try { await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {} 
-  };
-
-  const handleDeleteGlobalTag = async (tagName) => { 
-    try { await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_tags', 'main'), { tags: arrayRemove(tagName) }, { merge: true }); setFilterTags(filterTags.filter(t => t !== tagName)); showToast(`已刪除標籤`); } catch (err) {} 
-  };
-
-  // --- 補上的 Save Settings 邏輯 ---
-  const handleSaveSettings = async (newSettings) => {
-    try {
-      await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_settings', 'main'), newSettings, { merge: true });
-      setModalType(null);
-      showToast("設定已儲存！");
-    } catch (err) { showToast("儲存失敗", "error"); }
-  };
-
-  const handleSaveBarcodes = async (hCode, wCode, hCert, wCert) => {
-    try {
-      await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_settings', 'main'), {
-        husbandBarcode: hCode, wifeBarcode: wCode, husbandCert: hCert, wifeCert: wCert
-      }, { merge: true });
-      showToast("載具設定已儲存！");
-    } catch (err) { showToast("儲存失敗", "error"); }
-  };
-
-  const handleAddAccount = async (accData) => { 
-    try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_accounts'), { ...accData, createdAt: serverTimestamp() }); setModalType(null); showToast("帳戶已建立！"); } catch (err) {} 
-  };
-
-  const handleDeleteAccount = (id) => { 
-    setConfirmDialog({ 
-      message: '確定要移除此帳戶嗎？(不影響明細)', 
-      onConfirm: async () => { 
-        try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_accounts', id)); showToast("帳戶已移除"); } 
-        catch (err) { showToast("刪除失敗", "error"); } 
-        setConfirmDialog(null); 
-      }
-    }); 
-  };
-
-  const handleAddBill = async (billData) => { 
-    try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_bills'), { ...billData, isPaid: false, createdAt: serverTimestamp() }); setModalType(null); showToast("帳單已建立！"); } catch (err) {} 
-  };
-
-  const handleDeleteBill = (id) => { 
-    setConfirmDialog({ 
-      message: '確定要移除此固定帳單嗎？', 
-      onConfirm: async () => { 
-        try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_bills', id)); showToast("帳單已移除"); } 
-        catch (err) { showToast("刪除失敗", "error"); } 
-        setConfirmDialog(null); 
-      }
-    }); 
-  };
-
-  const handlePayBill = async (bill) => { 
-    try { 
-      await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_bills', bill.id), { isPaid: true }); 
-      const targetAccountId = bill.isStudio ? (accounts.find(a=>a.type==='brand')?.id || 'acc_joint') : 'acc_joint'; 
-      handleAddTx({ type: 'expense', amount: bill.amount, category: bill.category, note: `${bill.name} (自動繳納)`, accountId: targetAccountId, who: 'joint' }); 
-    } catch (err) {} 
-  };
-
-  const handleAddShoppingItem = async (e) => { 
-    e.preventDefault(); const text = e.target.itemText.value.trim(); if (!text) return; 
-    try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_shopping'), { text, completed: false, createdAt: serverTimestamp() }); e.target.reset(); } catch (err) {} 
-  };
-
-  const handleToggleShoppingItem = async (id, currentStatus) => { 
-    try { await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_shopping', id), { completed: !currentStatus }); } catch (err) {} 
-  };
-
-  const handleDeleteShoppingItem = async (id) => { 
-    try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_shopping', id)); } catch (err) {} 
-  };
-
-  const handleSaveNote = async (noteData) => { 
-    try { 
-      if (noteData.id) await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_notes', noteData.id), { title: noteData.title, content: noteData.content, updatedAt: serverTimestamp() }); 
-      else await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_notes'), { title: noteData.title, content: noteData.content, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); 
-      setModalType(null); setSelectedNote(null); showToast("筆記已儲存！"); 
-    } catch (err) {} 
-  };
-
-  const handleDeleteNote = (id) => { 
-    setConfirmDialog({ 
-      message: '確定刪除這篇筆記？', 
-      onConfirm: async () => { 
-        try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_notes', id)); setModalType(null); setSelectedNote(null); showToast("筆記已刪除"); } 
-        catch (err) { showToast("刪除失敗", "error");} 
-        setConfirmDialog(null); 
-      }
-    }); 
-  };
-
-  const handleAddEvent = async (eventData) => { 
-    try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_events'), { ...eventData, createdAt: serverTimestamp() }); setModalType(null); showToast("紀念日已新增！"); } catch (err) {} 
-  };
-
-  const handleDeleteEvent = (id) => { 
-    setConfirmDialog({ 
-      message: '確定刪除這個日子？', 
-      onConfirm: async () => { 
-        try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_events', id)); showToast("日子已刪除"); } 
-        catch (err) { showToast("刪除失敗", "error");} 
-        setConfirmDialog(null); 
-      }
-    }); 
-  };
-
-  const handleAddGoal = async (goal) => { 
-    try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_goals'), { ...goal, currentAmount: 0, createdAt: serverTimestamp() }); setModalType(null); showToast("目標已建立！"); } catch (err) {} 
-  };
-
-  const handleAddFunds = async (amt) => { 
-    try { await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_goals', selectedGoal.id), { currentAmount: selectedGoal.currentAmount + amt }); setModalType(null); setSelectedGoal(null); showToast("存入成功！"); } catch (err) {} 
-  };
-
-  const handleDeleteGoal = (id) => { 
-    setConfirmDialog({ 
-      message: '確定要放棄這個存錢目標嗎？', 
-      onConfirm: async () => { 
-        try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_goals', id)); showToast("目標已刪除"); } 
-        catch (err) { showToast("刪除失敗", "error");} 
-        setConfirmDialog(null); 
-      }
-    }); 
-  };
+  const handleAddTx = async (newTx) => { try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_ledger'), { ...newTx, date: getLocalYYYYMMDD(new Date(currentDate)), month: getLocalYYYYMM(new Date(currentDate)), createdAt: serverTimestamp(), createdBy: user.uid }); setModalType(null); showToast("記帳成功！"); } catch (err) { showToast("網路錯誤", "error"); } };
+  const handleDeleteTx = (id) => { setConfirmDialog({ message: '確定要刪除這筆紀錄嗎？', onConfirm: async () => { try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_ledger', id)); showToast("紀錄已刪除"); } catch (err) { showToast("刪除失敗", "error"); } setConfirmDialog(null); }}); };
+  const handleAddGlobalTag = async (tagName) => { if (!tagName.trim() || globalTags.includes(tagName)) return; try { await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {} };
+  const handleDeleteGlobalTag = async (tagName) => { try { await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_tags', 'main'), { tags: arrayRemove(tagName) }, { merge: true }); setFilterTags(filterTags.filter(t => t !== tagName)); showToast(`已刪除標籤`); } catch (err) {} };
+  const handleAddAccount = async (accData) => { try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_accounts'), { ...accData, createdAt: serverTimestamp() }); setModalType(null); showToast("帳戶已建立！"); } catch (err) {} };
+  const handleDeleteAccount = (id) => { setConfirmDialog({ message: '確定要移除此帳戶嗎？(不影響明細)', onConfirm: async () => { try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_accounts', id)); showToast("帳戶已移除"); } catch (err) { showToast("刪除失敗", "error"); } setConfirmDialog(null); }}); };
+  const handleAddBill = async (billData) => { try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_bills'), { ...billData, isPaid: false, createdAt: serverTimestamp() }); setModalType(null); showToast("帳單已建立！"); } catch (err) {} };
+  const handleDeleteBill = (id) => { setConfirmDialog({ message: '確定要移除此固定帳單嗎？', onConfirm: async () => { try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_bills', id)); showToast("帳單已移除"); } catch (err) { showToast("刪除失敗", "error"); } setConfirmDialog(null); }}); };
+  const handlePayBill = async (bill) => { try { await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_bills', bill.id), { isPaid: true }); const targetAccountId = bill.isStudio ? (accounts.find(a=>a.type==='brand')?.id || 'acc_joint') : 'acc_joint'; handleAddTx({ type: 'expense', amount: bill.amount, category: bill.category, note: `${bill.name} (自動繳納)`, accountId: targetAccountId, who: 'joint' }); } catch (err) {} };
+  const handleAddShoppingItem = async (e) => { e.preventDefault(); const text = e.target.itemText.value.trim(); if (!text) return; try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_shopping'), { text, completed: false, createdAt: serverTimestamp() }); e.target.reset(); } catch (err) {} };
+  const handleToggleShoppingItem = async (id, currentStatus) => { try { await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_shopping', id), { completed: !currentStatus }); } catch (err) {} };
+  const handleDeleteShoppingItem = async (id) => { try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_shopping', id)); } catch (err) {} };
+  const handleSaveNote = async (noteData) => { try { if (noteData.id) await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_notes', noteData.id), { title: noteData.title, content: noteData.content, updatedAt: serverTimestamp() }); else await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_notes'), { title: noteData.title, content: noteData.content, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); setModalType(null); setSelectedNote(null); showToast("筆記已儲存！"); } catch (err) {} };
+  const handleDeleteNote = (id) => { setConfirmDialog({ message: '確定刪除這篇筆記？', onConfirm: async () => { try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_notes', id)); setModalType(null); setSelectedNote(null); showToast("筆記已刪除"); } catch (err) { showToast("刪除失敗", "error");} setConfirmDialog(null); }}); };
+  const handleAddEvent = async (eventData) => { try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_events'), { ...eventData, createdAt: serverTimestamp() }); setModalType(null); showToast("紀念日已新增！"); } catch (err) {} };
+  const handleDeleteEvent = (id) => { setConfirmDialog({ message: '確定刪除這個日子？', onConfirm: async () => { try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_events', id)); showToast("日子已刪除"); } catch (err) { showToast("刪除失敗", "error");} setConfirmDialog(null); }}); };
+  const handleAddGoal = async (goal) => { try { await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'shared_goals'), { ...goal, currentAmount: 0, createdAt: serverTimestamp() }); setModalType(null); showToast("目標已建立！"); } catch (err) {} };
+  const handleAddFunds = async (amt) => { try { await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_goals', selectedGoal.id), { currentAmount: selectedGoal.currentAmount + amt }); setModalType(null); setSelectedGoal(null); showToast("存入成功！"); } catch (err) {} };
+  const handleDeleteGoal = (id) => { setConfirmDialog({ message: '確定要放棄這個存錢目標嗎？', onConfirm: async () => { try { await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_goals', id)); showToast("目標已刪除"); } catch (err) { showToast("刪除失敗", "error");} setConfirmDialog(null); }}); };
 
   const handleCallAI = async () => {
     setIsAiLoading(true); setAiAnalysis('');
@@ -522,17 +289,11 @@ export default function App() {
       const prompt = `夫妻${timeContext}紀錄：支出${tabStats.totalExpense}元，預算${appSettings.monthlyBudget}元。前三花費:${topCats||'無'}。結算:${stext}。請用朋友溫馨語氣給一段50字理財建議(不列點)。`;
       
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) 
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) 
       });
       const data = await res.json();
       setAiAnalysis(data.candidates?.[0]?.content?.parts?.[0]?.text || 'AI 顧問去休息了~');
-    } catch (err) { 
-      setAiAnalysis('AI 產生失敗，請確認 API 連線'); 
-    } finally { 
-      setIsAiLoading(false); 
-    }
+    } catch (err) { setAiAnalysis('AI 產生失敗，請確認 API 連線'); } finally { setIsAiLoading(false); }
   };
   
   const handleExportToSheets = () => {
@@ -584,8 +345,9 @@ export default function App() {
   };
   
   const theme = getTheme();
+  
   return (
-    <>
+    <React.Fragment>
       <style dangerouslySetInnerHTML={{__html: `
         .pb-safe { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
         .pt-safe { padding-top: env(safe-area-inset-top); }
@@ -647,17 +409,15 @@ export default function App() {
             </div>
           </header>
 
-          <main className="px-6 space-y-8 flex-1 overflow-y-auto pb-32 pt-2 hide-scrollbar">
-            {/* 首頁 (Home) */}
+          <main className="px-6 space-y-8 flex-1 overflow-y-auto pb-40 pt-2 hide-scrollbar">
             {activeTab === 'home' && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                {/* 這裡是你原本寫好的首頁區塊 (上方總支出、搜尋框、最近明細等) */}
                 <section className={`bg-gradient-to-br ${theme.card} rounded-[2rem] p-7 shadow-md border ${theme.border} relative transition-colors duration-500`}>
                   <div className="flex justify-between items-center mb-3">
-                      <button onClick={() => setModalType('datePicker')} className={`flex items-center gap-1.5 text-base font-bold ${theme.textMuted} hover:${theme.text} transition-colors bg-black/5 px-4 py-2 rounded-xl`}>
-                        {currentDate.getFullYear()}年{currentDate.getMonth() + 1}月 <ChevronDown className="w-4 h-4" />
-                      </button>
-                      <span className={`text-base font-bold ${theme.textMuted}`}>{workspace === 'family' ? '總支出' : '總開銷'}</span>
+                     <button onClick={() => setModalType('datePicker')} className={`flex items-center gap-1.5 text-base font-bold ${theme.textMuted} hover:${theme.text} transition-colors bg-black/5 px-4 py-2 rounded-xl`}>
+                       {currentDate.getFullYear()}年{currentDate.getMonth() + 1}月 <ChevronDown className="w-4 h-4" />
+                     </button>
+                     <span className={`text-base font-bold ${theme.textMuted}`}>{workspace === 'family' ? '總支出' : '總開銷'}</span>
                   </div>
                   <div className="flex items-baseline gap-1.5 mb-5"><span className={`text-3xl font-bold ${theme.textMuted}`}>$</span><h2 className="text-6xl font-black tracking-tighter">{homeStats.totalExpense.toLocaleString()}</h2></div>
                   
@@ -741,100 +501,245 @@ export default function App() {
               </div>
             )}
 
-            {/* 帳戶佔位區 (Accounts) */}
-            {activeTab === 'accounts' && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 text-center py-20">
-                <Wallet className={`w-16 h-16 mx-auto mb-4 opacity-50 ${theme.textMuted}`} />
-                <h2 className={`text-xl font-bold ${theme.text}`}>帳戶功能</h2>
-                <p className={`mt-2 ${theme.textMuted}`}>這裡即將顯示你的各個帳戶與餘額</p>
+            {activeTab === 'wallets' && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="flex justify-between items-center px-2 mb-3">
+                  <h2 className="text-2xl font-black">總資產與帳戶</h2>
+                  <span className={`text-2xl font-black ${theme.primaryText}`}>${totalAssets.toLocaleString()}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {accounts.map(acc => {
+                    const isBrand = acc.type === 'brand';
+                    const accStyle = isBrand ? 'bg-gradient-to-br from-indigo-500/10 to-transparent border-indigo-500/20 text-indigo-500' : `${theme.cardInner} ${theme.border} ${theme.text}`;
+                    return (
+                      <div key={acc.id} className={`p-5 rounded-3xl border shadow-sm relative group hover:shadow-md transition-shadow ${accStyle}`}>
+                        <div className="flex items-center gap-3 mb-4 pr-8">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-sm text-xl ${isBrand ? 'bg-indigo-500/20' : 'bg-black/5'}`}>{acc.icon}</div>
+                          <span className={`text-sm font-bold line-clamp-1 opacity-90`}>{acc.name}</span>
+                        </div>
+                        <div className="text-2xl font-black">${(accBalances[acc.id] || 0).toLocaleString()}</div>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id); }} className="absolute top-3 right-3 w-10 h-10 flex items-center justify-center text-red-400 hover:bg-red-500 hover:text-white rounded-full opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-5 h-5"/></button>
+                      </div>
+                    )
+                  })}
+                  <div onClick={() => setModalType('addAccount')} className={`${theme.bg} border-2 border-dashed ${theme.border} rounded-3xl p-5 flex flex-col items-center justify-center ${theme.textMuted} cursor-pointer min-h-[120px] hover:opacity-80 transition-opacity`}>
+                     <Plus className="w-8 h-8 mb-2" /><span className="text-sm font-bold">新增帳戶</span>
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* 統計佔位區 (Stats) */}
             {activeTab === 'stats' && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 text-center py-20">
-                <PieChartIcon className={`w-16 h-16 mx-auto mb-4 opacity-50 ${theme.textMuted}`} />
-                <h2 className={`text-xl font-bold ${theme.text}`}>統計圖表</h2>
-                <p className={`mt-2 ${theme.textMuted}`}>這裡即將顯示你的消費佔比與分析</p>
-              </div>
-            )}
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                 <div className={`flex ${theme.bg} p-2 rounded-2xl border ${theme.border} shadow-sm mx-1 mb-4`}>
+                    <button onClick={() => setStatsView('month')} className={`flex-1 py-3 rounded-xl text-sm font-extrabold transition-all ${statsView === 'month' ? `bg-black/5 ${theme.text} shadow-sm` : theme.textMuted}`}>當月分析</button>
+                    <button onClick={() => setStatsView('year')} className={`flex-1 py-3 rounded-xl text-sm font-extrabold transition-all ${statsView === 'year' ? `bg-black/5 ${theme.text} shadow-sm` : theme.textMuted}`}>年度總結</button>
+                 </div>
 
-            {/* 生活佔位區 (Life) */}
-            {activeTab === 'life' && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 text-center py-20">
-                <ClipboardList className={`w-16 h-16 mx-auto mb-4 opacity-50 ${theme.textMuted}`} />
-                <h2 className={`text-xl font-bold ${theme.text}`}>生活工具</h2>
-                <p className={`mt-2 ${theme.textMuted}`}>固定帳單、購物清單與紀念日都在這</p>
-              </div>
-            )}
-          </main>
+                 <div className="flex justify-between items-center px-2 mb-4">
+                     <button onClick={() => setModalType('datePicker')} className={`flex items-center gap-2 text-base font-bold ${theme.text} hover:opacity-80 transition-opacity ${theme.bg} px-4 py-2 rounded-xl border ${theme.border} shadow-sm`}>
+                       {statsView === 'month' ? `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月` : `${currentDate.getFullYear()}年度`} <ChevronDown className="w-5 h-5" />
+                     </button>
+                     <span className="text-3xl font-black">${tabStats.totalExpense.toLocaleString()}</span>
+                 </div>
 
-          {/* 🌟 修正1：響應式浮動記帳按鈕 (完美對齊 PC 與 Mobile) */}
-          <div className="fixed bottom-24 w-full max-w-md sm:max-w-lg pointer-events-none flex justify-end px-6 z-40 transition-all">
-            <button 
-              onClick={() => setModalType('transaction')} 
-              className={`pointer-events-auto w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform ${workspace === 'studio' ? 'bg-indigo-600 text-white shadow-indigo-500/30' : `${theme.primary} text-white shadow-stone-800/30`}`}
-            >
-              <Plus className="w-8 h-8" />
-            </button>
-          </div>
+                 <div className={`${theme.bg} rounded-[2rem] p-6 border ${theme.border} shadow-sm`}>
+                  <div className="flex items-center gap-3 mb-5"><div className={`p-2.5 bg-black/5 rounded-xl`}><ArrowRightLeft className={`w-6 h-6 ${theme.text}`} /></div><h3 className="font-extrabold text-lg">{statsView === 'month' ? '本月' : '本年度'}代墊結算</h3></div>
+                  {settlement.status === 'settled' ? (
+                    <div className={`rounded-xl p-5 text-center border shadow-sm text-emerald-500 font-bold text-base bg-emerald-500/10 border-emerald-500/20`}>🎉 帳目完全算清！</div>
+                  ) : (
+                    <div className={`flex items-center justify-between ${theme.cardInner} rounded-2xl p-5 shadow-inner border ${theme.border}`}>
+                      <div className="flex flex-col items-center gap-2"><div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl shadow-sm ${settlement.who === 'husband' ? 'bg-[#EAE0D5]' : 'bg-[#FEF0C7]'}`}>{settlement.who === 'husband' ? '👨' : '👩'}</div><span className={`text-sm font-bold ${theme.textMuted}`}>{settlement.who === 'husband' ? '老公' : '老婆'}</span></div>
+                      <div className="flex flex-col items-center flex-1 px-4"><span className={`text-xs ${theme.textMuted} font-bold mb-2`}>需轉帳給</span><div className={`w-full h-1 bg-black/10 relative rounded-full`}><div className="absolute top-1/2 right-0 -translate-y-1/2 w-3 h-3 bg-black/20 rotate-45 transform origin-bottom-left"></div></div><span className="text-2xl font-black text-rose-500 mt-2">${Math.round(settlement.amount).toLocaleString()}</span></div>
+                      <div className="flex flex-col items-center gap-2"><div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl shadow-sm ${settlement.to === 'husband' ? 'bg-[#EAE0D5]' : 'bg-[#FEF0C7]'}`}>{settlement.to === 'husband' ? '👨' : '👩'}</div><span className={`text-sm font-bold ${theme.textMuted}`}>{settlement.to === 'husband' ? '老公' : '老婆'}</span></div>
+                    </div>
+                  )}
+                </div>
+                
+                <div className={`${theme.bg} rounded-[2rem] p-7 shadow-sm border ${theme.border} flex flex-col items-center`}>
+                    <div className={`relative w-56 h-56 rounded-full mb-8 border-[8px] ${isDarkMode ? 'border-stone-900' : 'border-white'} shadow-md`} style={{ background: `conic-gradient(${pieChartData.map((s,i,arr) => { let start = arr.slice(0,i).reduce((acc,c)=>acc+c.percentage,0); return `${s.color} ${start}% ${start+s.percentage}%` }).join(', ')})` }}><div className={`absolute inset-0 m-auto w-40 h-40 ${theme.bg} rounded-full flex flex-col items-center justify-center shadow-inner`}><span className={`text-sm ${theme.textMuted} font-bold mb-1`}>總支出</span><span className="text-3xl font-black">${tabStats.totalExpense.toLocaleString()}</span></div></div>
+                    <div className="w-full space-y-3">
+                      {pieChartData.length === 0 ? <p className={`text-center ${theme.textMuted} text-base font-bold`}>無支出資料</p> : pieChartData.map((item, idx) => (
+                        <div key={idx} className={`flex items-center justify-between text-base ${theme.cardInner} p-3.5 rounded-2xl border ${theme.border}`}><div className="flex items-center gap-3"><span className="w-4 h-4 rounded-full" style={{ backgroundColor: item.color }}></span><span className={`font-bold ${theme.text}`}>{item.icon} {item.name}</span></div><div className="flex items-center gap-4"><span className={`font-bold ${theme.textMuted} text-sm`}>{item.percentage}%</span><span className="font-black">${item.value.toLocaleString()}</span></div></div>
+                      ))}
+                    </div>
+                </div>
 
-          {/* 🌟 修正2：還原底部導覽列 (Bottom Navigation Bar) */}
-          <nav className={`fixed bottom-0 w-full max-w-md sm:max-w-lg ${theme.cardInner} border-t ${theme.border} flex justify-around items-center pb-safe pt-2 px-2 z-30 transition-colors duration-500`}>
-            <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'home' ? theme.primaryText : theme.textMuted}`}>
-              <Home className={`w-6 h-6 mb-1 ${activeTab === 'home' ? '' : 'opacity-60'}`} />
-              <span className="text-[10px] font-bold">首頁</span>
-            </button>
-            <button onClick={() => setActiveTab('accounts')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'accounts' ? theme.primaryText : theme.textMuted}`}>
-              <Wallet className={`w-6 h-6 mb-1 ${activeTab === 'accounts' ? '' : 'opacity-60'}`} />
-              <span className="text-[10px] font-bold">帳戶</span>
-            </button>
-            
-            <div className="w-10"></div> {/* 佔位符，讓中間稍微留空 */}
+                <div className={`bg-gradient-to-br from-indigo-500/10 to-transparent rounded-[2rem] p-6 border border-indigo-500/20`}>
+                  <div className="flex items-center gap-2 mb-4"><Sparkles className="w-6 h-6 text-indigo-500" /><h3 className="font-extrabold text-lg text-indigo-500">專屬 AI 財務顧問</h3></div>
+                  {aiAnalysis ? (<p className={`text-base leading-relaxed font-bold ${theme.bg} p-5 rounded-2xl shadow-sm ${theme.text}`}>{aiAnalysis}</p>) : (<button onClick={handleCallAI} disabled={isAiLoading || pieChartData.length===0} className={`w-full ${theme.bg} py-4 rounded-2xl font-bold text-base shadow-sm border border-indigo-500/20 hover:border-indigo-500 transition-all disabled:opacity-50 text-indigo-500 flex items-center justify-center gap-2`}>{isAiLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '💡 生成專屬理財建議'}</button>)}
+                </div>
+            </div>
+          )}
 
-            <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'stats' ? theme.primaryText : theme.textMuted}`}>
-              <PieChartIcon className={`w-6 h-6 mb-1 ${activeTab === 'stats' ? '' : 'opacity-60'}`} />
-              <span className="text-[10px] font-bold">統計</span>
-            </button>
-            <button onClick={() => setActiveTab('life')} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'life' ? theme.primaryText : theme.textMuted}`}>
-              <ClipboardList className={`w-6 h-6 mb-1 ${activeTab === 'life' ? '' : 'opacity-60'}`} />
-              <span className="text-[10px] font-bold">生活</span>
-            </button>
-          </nav>
+          {activeTab === 'life' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+               <div className={`flex ${theme.bg} p-2 rounded-2xl border ${theme.border} shadow-sm mx-1 overflow-x-auto hide-scrollbar`}>
+                  <button onClick={() => setLifeSubTab('bills')} className={`flex-1 min-w-[80px] py-3 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-1.5 ${lifeSubTab === 'bills' ? `bg-black/5 ${theme.text} shadow-sm` : theme.textMuted}`}><CalendarClock className="w-5 h-5" /> 帳單</button>
+                  <button onClick={() => setLifeSubTab('shopping')} className={`flex-1 min-w-[80px] py-3 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-1.5 ${lifeSubTab === 'shopping' ? `bg-black/5 ${theme.text} shadow-sm` : theme.textMuted}`}><ShoppingCart className="w-5 h-5" /> 購物</button>
+                  <button onClick={() => setLifeSubTab('notes')} className={`flex-1 min-w-[80px] py-3 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-1.5 ${lifeSubTab === 'notes' ? `bg-black/5 ${theme.text} shadow-sm` : theme.textMuted}`}><StickyNote className="w-5 h-5" /> 記事</button>
+                  <button onClick={() => setLifeSubTab('events')} className={`flex-1 min-w-[80px] py-3 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-1.5 ${lifeSubTab === 'events' ? `bg-black/5 ${theme.text} shadow-sm` : theme.textMuted}`}><CalendarHeart className="w-5 h-5" /> 日子</button>
+               </div>
 
-            {/* 浮動記帳按鈕 (幫你補上的，否則沒辦法呼叫 TransactionModal) */}
-            <div className="fixed bottom-6 right-6 z-40">
-              <button 
-                onClick={() => setModalType('transaction')} 
-                className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform ${workspace === 'studio' ? 'bg-indigo-600 text-white shadow-indigo-500/30' : `${theme.primary} text-white shadow-stone-800/30`}`}
-              >
-                <Plus className="w-8 h-8" />
+               {lifeSubTab === 'bills' && (
+                 <div className="animate-in fade-in duration-300 mx-1 space-y-4">
+                   <div className="flex justify-between items-end mb-5">
+                     <div><h3 className="font-extrabold text-lg">每月固定帳單</h3><p className={`text-sm font-bold ${theme.textMuted} mt-1`}>時間到自動提醒繳費</p></div>
+                     <button onClick={() => setModalType('addBill')} className={`text-xs font-bold ${theme.cardInner} border ${theme.border} px-4 py-2 rounded-full ${theme.text} transition-colors shadow-sm`}>+ 新增帳單</button>
+                   </div>
+                   {bills.length === 0 ? (<div className={`text-center py-20 ${theme.textMuted} text-base ${theme.cardInner} rounded-3xl border ${theme.border} shadow-sm font-bold`}>沒有固定帳單</div>) : bills.map(bill => {
+                     const isUrgent = bill.dueDate - currentDate.getDate() <= 3 && !bill.isPaid;
+                     return (
+                       <div key={bill.id} className={`p-5 rounded-[1.5rem] border shadow-sm transition-all relative group ${bill.isPaid ? `${theme.cardInner} border-transparent opacity-50` : isUrgent ? 'bg-rose-500/10 border-rose-500/30' : `${theme.bg} ${theme.border}`}`}>
+                         <div className="flex justify-between items-center pr-8">
+                           <div className="flex items-center gap-4">
+                             <div className={`w-12 h-12 rounded-full ${theme.cardInner} shadow-sm flex items-center justify-center text-xl`}>{bill.icon}</div>
+                             <div>
+                               <h4 className={`font-bold text-base ${bill.isPaid ? 'line-through opacity-50' : ''}`}>{bill.name} {bill.isStudio && <span className="ml-2 text-[10px] bg-indigo-500/20 text-indigo-500 px-2 py-1 rounded-md">工作室</span>}</h4>
+                               <p className={`text-xs font-bold mt-1 ${bill.isPaid ? theme.textMuted : isUrgent ? 'text-rose-500' : theme.textMuted}`}>{bill.isPaid ? '已繳納' : `每月 ${bill.dueDate} 日`}</p>
+                             </div>
+                           </div>
+                           <div className="flex items-center gap-4">
+                             <span className={`font-black text-lg ${bill.isPaid ? theme.textMuted : ''}`}>${bill.amount.toLocaleString()}</span>
+                             {!bill.isPaid ? (
+                               <button onClick={() => handlePayBill(bill)} className={`w-10 h-10 rounded-full ${theme.primary} text-white flex items-center justify-center shadow-md active:scale-90 transition-transform`}><Check className="w-5 h-5" /></button>
+                             ) : (
+                               <div className={`w-10 h-10 rounded-full ${theme.cardInner} ${theme.textMuted} flex items-center justify-center`}><CheckCircle2 className="w-6 h-6" /></div>
+                             )}
+                           </div>
+                         </div>
+                         <button onClick={(e) => { e.stopPropagation(); handleDeleteBill(bill.id); }} className={`absolute -top-3 -right-3 w-10 h-10 ${theme.bg} border ${theme.border} rounded-full text-red-500 flex items-center justify-center shadow-sm z-10 hover:bg-red-500 hover:text-white transition-colors`}>
+                             <X className="w-5 h-5"/>
+                         </button>
+                       </div>
+                     )
+                   })}
+                 </div>
+               )}
+
+               {lifeSubTab === 'shopping' && (
+                 <div className="animate-in fade-in duration-300 mx-1">
+                   <form onSubmit={handleAddShoppingItem} className="flex gap-3 mb-5">
+                     <input type="text" name="itemText" placeholder="新增待買物品..." className={`flex-1 ${theme.input} shadow-sm rounded-2xl px-5 py-4 text-base font-bold focus:outline-none focus:ring-2 ring-black/10`} />
+                     <button type="submit" className={`px-5 rounded-2xl font-bold text-white shadow-sm active:scale-95 ${theme.primary} transition-transform`}><Plus className="w-6 h-6"/></button>
+                   </form>
+                   <div className={`${theme.cardInner} rounded-3xl p-3 shadow-sm border ${theme.border} min-h-[300px]`}>
+                     {shoppingList.length === 0 ? (
+                       <div className={`text-center py-20 ${theme.textMuted} text-base font-bold`}>購物清單空空如也！</div>
+                     ) : (
+                       <div className="space-y-1.5">
+                         {shoppingList.map(item => (
+                           <div key={item.id} className={`group flex items-center justify-between p-4 rounded-2xl hover:bg-black/5 transition-colors`}>
+                             <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => handleToggleShoppingItem(item.id, item.completed)}>
+                               <button className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all ${item.completed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-stone-400 text-transparent hover:border-emerald-400'}`}><CheckCircle2 className="w-5 h-5" /></button>
+                               <span className={`text-base font-bold transition-all ${item.completed ? `${theme.textMuted} line-through` : theme.text}`}>{item.text}</span>
+                             </div>
+                             <button onClick={() => handleDeleteShoppingItem(item.id)} className="p-3 text-red-400 hover:bg-red-500/10 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all"><Trash2 className="w-5 h-5" /></button>
+                           </div>
+                         ))}
+                       </div>
+                     )}
+                   </div>
+                 </div>
+               )}
+
+               {lifeSubTab === 'notes' && (
+                 <div className="animate-in fade-in duration-300 mx-1 relative min-h-[400px]">
+                   <div className="grid grid-cols-2 gap-4 pb-20">
+                     <div onClick={() => { setSelectedNote(null); setModalType('noteEditor'); }} className={`${theme.cardInner} border-2 border-dashed ${theme.border} rounded-3xl p-5 flex flex-col items-center justify-center ${theme.textMuted} cursor-pointer hover:opacity-80 transition-opacity min-h-[180px]`}><Plus className="w-10 h-10 mb-3" /><span className="text-base font-bold">新增筆記</span></div>
+                     {notes.map(note => ( <div key={note.id} onClick={() => { setSelectedNote(note); setModalType('noteEditor'); }} className="bg-[#FEF0C7] text-stone-800 rounded-3xl p-6 shadow-md border border-[#E9C46A]/50 cursor-pointer hover:shadow-lg transition-all relative group min-h-[180px] flex flex-col"><h4 className="font-extrabold text-base mb-3 line-clamp-2">{note.title}</h4><p className="text-sm text-stone-700/90 line-clamp-4 leading-relaxed whitespace-pre-wrap flex-1 font-bold">{note.content}</p><Edit3 className="w-5 h-5 text-[#B57C00] absolute bottom-5 right-5 opacity-50 group-hover:opacity-100 transition-opacity" /></div> ))}
+                   </div>
+                 </div>
+               )}
+
+               {lifeSubTab === 'events' && (
+                 <div className="animate-in fade-in duration-300 mx-1 space-y-4">
+                   <div className="flex justify-between items-end mb-5">
+                     <div><h3 className="font-extrabold text-lg">重要日子倒數</h3><p className={`text-sm font-bold ${theme.textMuted} mt-1`}>紀念日與行程</p></div>
+                     <button onClick={() => setModalType('addEvent')} className={`text-xs font-bold text-rose-500 bg-rose-500/10 px-4 py-2 rounded-full hover:bg-rose-500/20 transition-colors shadow-sm`}>+ 新增日子</button>
+                   </div>
+                   {events.length === 0 ? ( <div className={`text-center py-20 ${theme.textMuted} text-base font-bold ${theme.bg} rounded-3xl border ${theme.border} shadow-sm`}>還沒有設定重要的日子喔！</div> ) : events.map(event => {
+                     const daysDiff = calculateDaysDiff(event.date); const isFuture = daysDiff > 0; const isToday = daysDiff === 0;
+                     return (
+                       <div key={event.id} className={`group relative overflow-hidden rounded-[1.5rem] p-6 shadow-sm border transition-all hover:shadow-md ${isToday ? 'bg-gradient-to-br from-rose-500/20 to-pink-500/10 border-rose-500/30' : `${theme.bg} ${theme.border}`}`}>
+                         <div className="flex justify-between items-start pr-10">
+                           <div className="flex items-center gap-4">
+                             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-sm ${isToday ? 'bg-white/50 text-rose-600' : `${theme.cardInner}`}`}>{event.icon || '🎉'}</div>
+                             <div><h4 className={`font-extrabold text-base ${isToday ? 'text-rose-600' : ''}`}>{event.title}</h4><p className={`text-xs mt-1 font-bold ${isToday ? 'text-rose-500' : theme.textMuted}`}>{event.date}</p></div>
+                           </div>
+                           <div className="flex flex-col items-end">
+                             {isToday ? (<span className="text-2xl font-black text-rose-500 animate-pulse">就是今天！</span>) : (<div className="flex items-baseline gap-1.5"><span className={`text-sm font-bold ${theme.textMuted}`}>{isFuture ? '還有' : '已經'}</span><span className={`text-4xl font-black ${isFuture ? theme.primaryText : 'text-stone-500'}`}>{Math.abs(daysDiff)}</span><span className={`text-sm font-bold ${theme.textMuted}`}>天</span></div>)}
+                           </div>
+                         </div>
+                         <button onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id); }} className={`absolute top-5 right-5 p-2 text-red-400 hover:bg-red-500/10 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-colors z-10`}><Trash2 className="w-5 h-5" /></button>
+                       </div>
+                     )
+                   })}
+                 </div>
+               )}
+            </div>
+          )}
+
+          {/* === 🎯 目標 === */}
+          {activeTab === 'goals' && (
+            <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
+               <div className="flex justify-between items-center px-2 mb-3"><h2 className="text-2xl font-black">夢想撲滿</h2><button onClick={() => setModalType('goal')} className={`text-sm font-bold ${theme.bg} border ${theme.border} px-5 py-2 rounded-full transition-colors shadow-sm`}>+ 新增願望</button></div>
+               <div className="grid grid-cols-1 gap-5">
+                {goals.length === 0 ? ( <div className={`${theme.bg} p-10 rounded-[2rem] border ${theme.border} text-center shadow-sm font-bold`}><Target className={`w-14 h-14 ${theme.textMuted} mx-auto mb-4`} /><p className={`text-base ${theme.textMuted}`}>還沒有設定存錢目標喔！</p></div>) : goals.map(goal => {
+                  const progress = Math.min((goal.currentAmount / goal.targetAmount) * 100, 100); const isCompleted = progress >= 100;
+                  return (
+                    <div key={goal.id} className={`group ${theme.bg} p-6 rounded-[2rem] border ${theme.border} shadow-sm relative overflow-hidden`}>
+                      <div className="flex justify-between items-center mb-4 pr-10"><div className="font-extrabold text-xl flex items-center gap-3">{isCompleted ? '🎉' : '🎯'} {goal.title}</div><div className={`text-sm font-black ${theme.textMuted} bg-black/5 px-3 py-1.5 rounded-lg`}>{progress.toFixed(0)}%</div></div>
+                      <div className="flex justify-between items-end mb-3"><span className="text-3xl font-black">${goal.currentAmount.toLocaleString()}</span><span className={`text-sm font-bold ${theme.textMuted} mb-1`}>/ ${goal.targetAmount.toLocaleString()}</span></div>
+                      <div className={`h-4 w-full ${theme.cardInner} rounded-full overflow-hidden mb-5 shadow-inner`}><div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : theme.primary}`} style={{ width: `${progress}%` }}></div></div>
+                      {!isCompleted && (<button onClick={() => { setSelectedGoal(goal); setModalType('addFunds'); }} className={`w-full py-4 ${theme.cardInner} font-bold text-base rounded-2xl hover:opacity-80 flex items-center justify-center gap-2 active:scale-95 transition-transform border ${theme.border}`}><Coins className={`w-5 h-5 ${theme.primaryText}`} /> 存入資金</button>)}
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteGoal(goal.id); }} className="absolute top-5 right-5 p-2 text-red-400 hover:bg-red-500/10 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-colors z-10"><Trash2 className="w-5 h-5" /></button>
+                    </div>
+                  )
+                })}
+               </div>
+            </div>
+          )}
+        </main>
+
+        <div className="fixed bottom-0 left-0 right-0 z-40 flex justify-center pointer-events-none">
+          <div className="w-full max-w-md sm:max-w-lg relative pointer-events-auto">
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-50">
+              <button onClick={() => setModalType('transaction')} className={`h-16 w-16 sm:h-20 sm:w-20 ${theme.primary} text-white rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 active:scale-90 border-[6px] sm:border-[8px] ${theme.border}`}>
+                 <Plus className="w-8 h-8 sm:w-10 sm:h-10" />
               </button>
             </div>
-
-            {/* ========== 這裡補上所有 Modal 渲染邏輯 ========== */}
-            {modalType === 'notifications' && <NotificationsModal onClose={() => setModalType(null)} activeNotifications={activeNotifications} theme={theme} />}
-            {modalType === 'filterTags' && <FilterTagsModal onClose={() => setModalType(null)} globalTags={globalTags} filterTags={filterTags} setFilterTags={setFilterTags} onDeleteTag={handleDeleteGlobalTag} theme={theme} />}
-            {modalType === 'datePicker' && <DatePickerModal onClose={() => setModalType(null)} currentDate={currentDate} onSelect={(date) => { setCurrentDate(date); setModalType(null); }} theme={theme} />}
-            {modalType === 'transaction' && <TransactionModal onClose={() => setModalType(null)} onSave={handleAddTx} accounts={accounts} workspace={workspace} globalTags={globalTags} onAddGlobalTag={handleAddGlobalTag} theme={theme} onShowToast={showToast} />}
-            {modalType === 'settings' && <SettingsModal onClose={() => setModalType(null)} settings={appSettings} onSave={handleSaveSettings} onExport={handleExportToSheets} theme={theme} />}
-            {modalType === 'barcode' && <BarcodeModal onClose={() => setModalType(null)} barcodes={appSettings} onSaveSettings={handleSaveBarcodes} onAddTx={handleAddTx} onShowToast={showToast} theme={theme} activeWorkspace={workspace} />}
-            
-            {/* 以下三個 Modal 原本沒有觸發按鈕，但一併補上以防未來使用 */}
-            {modalType === 'addAccount' && <AddAccountModal onClose={() => setModalType(null)} onSave={handleAddAccount} theme={theme} />}
-            {modalType === 'addBill' && <AddBillModal onClose={() => setModalType(null)} onSave={handleAddBill} theme={theme} />}
-            {modalType === 'addEvent' && <AddEventModal onClose={() => setModalType(null)} onSave={handleAddEvent} theme={theme} />}
-            {modalType === 'addGoal' && <AddGoalModal onClose={() => setModalType(null)} onSave={handleAddGoal} theme={theme} />}
-            {modalType === 'addFunds' && <AddFundsModal onClose={() => setModalType(null)} onSave={handleAddFunds} goalName={selectedGoal?.title} theme={theme} />}
-
+            <nav className={`absolute bottom-0 w-full ${theme.cardInner} bg-opacity-95 backdrop-blur-xl border-t ${theme.border} px-6 pb-safe pt-3 flex justify-between items-center shadow-[0_-20px_40px_rgba(0,0,0,0.05)] h-[84px] sm:h-[96px] transition-colors duration-500 rounded-t-3xl`}>
+              <div className="flex gap-8 sm:gap-12">
+                <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1.5 ${activeTab === 'home' ? theme.primaryText : theme.textMuted}`}><Home className="w-7 h-7 sm:w-8 sm:h-8" /><span className="text-[11px] sm:text-xs font-extrabold">首頁</span></button>
+                <button onClick={() => setActiveTab('wallets')} className={`flex flex-col items-center gap-1.5 ${activeTab === 'wallets' ? theme.primaryText : theme.textMuted}`}><Wallet className="w-7 h-7 sm:w-8 sm:h-8" /><span className="text-[11px] sm:text-xs font-extrabold">帳戶</span></button>
+              </div>
+              <div className="w-16 sm:w-24"></div> 
+              <div className="flex gap-8 sm:gap-12">
+                <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center gap-1.5 ${activeTab === 'stats' ? theme.primaryText : theme.textMuted}`}><PieChartIcon className="w-7 h-7 sm:w-8 sm:h-8" /><span className="text-[11px] sm:text-xs font-extrabold">統計</span></button>
+                <button onClick={() => setActiveTab('life')} className={`flex flex-col items-center gap-1.5 ${activeTab === 'life' ? theme.primaryText : theme.textMuted}`}><ClipboardList className="w-7 h-7 sm:w-8 sm:h-8" /><span className="text-[11px] sm:text-xs font-extrabold">生活</span></button>
+              </div>
+            </nav>
+          </div>
         </div>
+
+        {modalType === 'transaction' && <TransactionModal accounts={accounts} workspace={workspace} globalTags={globalTags} onAddGlobalTag={handleAddGlobalTag} onClose={() => setModalType(null)} onSave={handleAddTx} theme={theme} onShowToast={showToast} />}
+        {modalType === 'addAccount' && <AddAccountModal onClose={() => setModalType(null)} onSave={handleAddAccount} theme={theme} />}
+        {modalType === 'addBill' && <AddBillModal onClose={() => setModalType(null)} onSave={handleAddBill} theme={theme} />}
+        {modalType === 'noteEditor' && <NoteEditorModal onClose={() => {setModalType(null); setSelectedNote(null);}} onSave={handleSaveNote} onDelete={handleDeleteNote} initialData={selectedNote} theme={theme} />}
+        {modalType === 'addEvent' && <AddEventModal onClose={() => setModalType(null)} onSave={handleAddEvent} theme={theme} />}
+        {modalType === 'goal' && <AddGoalModal onClose={() => setModalType(null)} onSave={handleAddGoal} theme={theme} />}
+        {modalType === 'addFunds' && <AddFundsModal onClose={() => {setModalType(null); setSelectedGoal(null);}} onSave={handleAddFunds} goalName={selectedGoal?.title} theme={theme} />}
+        {modalType === 'settings' && <SettingsModal onClose={() => setModalType(null)} settings={appSettings} onSave={(s) => { setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_settings', 'main'), s, { merge: true }); showToast("設定已儲存！"); setModalType(null); }} onExport={handleExportToSheets} theme={theme} />}
+        {modalType === 'barcode' && <BarcodeModal onClose={() => setModalType(null)} barcodes={{husbandBarcode: appSettings.husbandBarcode, wifeBarcode: appSettings.wifeBarcode, husbandCert: appSettings.husbandCert, wifeCert: appSettings.wifeCert}} onSaveSettings={(h,w, hc, wc) => {setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'shared_settings', 'main'), { husbandBarcode: h, wifeBarcode: w, husbandCert: hc, wifeCert: wc }, { merge: true }); showToast("載具設定已儲存！"); }} onAddTx={handleAddTx} onShowToast={showToast} theme={theme} activeWorkspace={workspace} />}
+        {modalType === 'datePicker' && <DatePickerModal onClose={() => setModalType(null)} currentDate={currentDate} onSelect={(newDate) => {setCurrentDate(newDate); setModalType(null);}} theme={theme} />}
+        {modalType === 'filterTags' && <FilterTagsModal onClose={() => setModalType(null)} globalTags={globalTags} filterTags={filterTags} setFilterTags={setFilterTags} onDeleteTag={handleDeleteGlobalTag} theme={theme} />}
+        {modalType === 'notifications' && <NotificationsModal onClose={() => setModalType(null)} activeNotifications={activeNotifications} theme={theme} />}
       </div>
-    </>
+    </div>
+  </React.Fragment>
   );
 }
-// ==========================================
-// Modals (所有彈出視窗組件)
-// ==========================================
 
 function NotificationsModal({ onClose, activeNotifications, theme }) {
   return (
@@ -928,20 +833,6 @@ function DatePickerModal({ onClose, currentDate, onSelect, theme }) {
 
 function TransactionModal({ onClose, onSave, accounts, workspace, globalTags, onAddGlobalTag, theme, onShowToast }) {
   const [type, setType] = useState('expense');
-  const EXPENSE_CATEGORIES = [
-    { id: 'food', name: '餐飲', icon: '🍽️' }, { id: 'shopping', name: '購物', icon: '🛍️' },
-    { id: 'transport', name: '交通', icon: '🚗' }, { id: 'home', name: '居家', icon: '🏠' },
-    { id: 'entertainment', name: '娛樂', icon: '🍿' }, { id: 'other_exp', name: '其他', icon: '✨' },
-  ];
-  const STUDIO_EXPENSE_CATEGORIES = [
-    { id: 'software', name: '軟體訂閱', icon: '💻' }, { id: 'equipment', name: '器材', icon: '📷' },
-    { id: 'marketing', name: '行銷廣告', icon: '📢' }, { id: 'other_studio', name: '雜支', icon: '✨' },
-  ];
-  const INCOME_CATEGORIES = [
-    { id: 'salary', name: '薪資', icon: '💰' }, { id: 'investment', name: '投資', icon: '📈' },
-    { id: 'brand', name: '品牌收入', icon: '💼' }, { id: 'other_inc', name: '其他', icon: '✨' },
-  ];
-
   const currentCategories = workspace === 'family' ? (type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES) : (type === 'expense' ? STUDIO_EXPENSE_CATEGORIES : INCOME_CATEGORIES);
   const defaultAccount = workspace === 'family' ? 'acc_joint' : 'acc_studio';
   const [category, setCategory] = useState(currentCategories[0].name); 
@@ -1140,6 +1031,7 @@ function TransactionModal({ onClose, onSave, accounts, workspace, globalTags, on
     </div>
   );
 }
+
 function AddAccountModal({ onClose, onSave, theme }) {
   const [name, setName] = useState(''); const [type, setType] = useState('joint'); const [icon, setIcon] = useState('🏦');
   const icons = ['🏦', '💳', '💵', '💼', '🐖', '🪙', '💎'];
@@ -1163,6 +1055,11 @@ function AddEventModal({ onClose, onSave, theme }) {
   return ( <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"><div className={`w-full max-w-sm sm:max-w-lg ${theme.cardInner} rounded-t-[2.5rem] sm:rounded-[2rem] p-7 pb-safe shadow-2xl border ${theme.border}`}><div className="flex justify-between items-center mb-6"><h3 className="font-black text-xl text-rose-500 flex items-center gap-2"><CalendarHeart className="w-6 h-6"/> 重要的日子</h3><button onClick={onClose} className={`p-2.5 ${theme.bg} ${theme.textMuted} rounded-full`}><X className="w-6 h-6" /></button></div><form onSubmit={(e)=>{e.preventDefault(); if(title && dateStr) onSave({title, date: dateStr, icon});}} className="space-y-5"><div><label className={`block text-sm font-bold ${theme.textMuted} mb-2`}>是什麼日子？</label><input type="text" value={title} onChange={e => setTitle(e.target.value)} autoFocus placeholder="例如：交往三週年" className={`w-full ${theme.bg} border ${theme.border} ${theme.text} rounded-xl px-4 py-4 text-base font-bold focus:outline-none focus:border-rose-400`} /></div><div><label className={`block text-sm font-bold ${theme.textMuted} mb-2`}>日期</label><input type="date" value={dateStr} onChange={e => setDateStr(e.target.value)} className={`w-full ${theme.bg} border ${theme.border} ${theme.text} rounded-xl px-4 py-4 text-base font-bold focus:outline-none focus:border-rose-400`} /></div><div><label className={`block text-sm font-bold ${theme.textMuted} mb-3`}>選擇圖示</label><div className="flex gap-3 flex-wrap justify-center">{icons.map(i => (<button key={i} type="button" onClick={() => setIcon(i)} className={`w-12 h-12 rounded-full text-2xl flex items-center justify-center transition-transform ${icon === i ? 'bg-rose-500/20 border-2 border-rose-500 scale-110 shadow-sm' : `${theme.bg} border ${theme.border} grayscale-[50%]`}`}>{i}</button>))}</div></div><button type="submit" disabled={!title || !dateStr} className="w-full mt-5 bg-rose-500 text-white font-black py-4 rounded-xl disabled:opacity-50 shadow-md shadow-rose-500/20 active:scale-95">儲存日子</button></form></div></div> );
 }
 
+function NoteEditorModal({ onClose, onSave, onDelete, initialData, theme }) {
+  const [title, setTitle] = useState(initialData?.title || ''); const [content, setContent] = useState(initialData?.content || '');
+  return ( <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"><div className="w-full max-w-md sm:max-w-lg bg-[#FEF0C7] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col h-[85vh] p-7 pb-safe border border-[#E9C46A]"><div className="flex justify-between items-center mb-6"><h3 className="font-black text-xl text-[#B57C00] flex items-center gap-2"><StickyNote className="w-6 h-6"/> 共同記事</h3><div className="flex items-center gap-2">{initialData && (<button onClick={() => onDelete(initialData.id)} className="p-3 text-[#B57C00]/60 hover:text-red-500 hover:bg-white/50 rounded-full transition-colors"><Trash2 className="w-6 h-6" /></button>)}<button onClick={onClose} className="p-3 bg-white/50 text-[#B57C00] hover:bg-white rounded-full transition-colors shadow-sm"><X className="w-6 h-6" /></button></div></div><div className="flex-1 flex flex-col gap-5"><input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="記事標題..." autoFocus className="w-full bg-transparent border-b-2 border-[#E9C46A] px-2 py-4 text-3xl font-black text-stone-800 focus:outline-none placeholder:text-[#B57C00]/40" /><textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="在這裡寫下需要共同記住的事情..." className="w-full flex-1 bg-white/40 backdrop-blur-sm border border-white/50 rounded-3xl p-5 text-stone-800 text-lg leading-relaxed resize-none focus:outline-none focus:bg-white/60 transition-colors placeholder:text-[#B57C00]/40 font-bold shadow-inner"></textarea></div><button onClick={() => onSave({ id: initialData?.id, title, content })} disabled={!title && !content} className="w-full mt-6 bg-[#B57C00] text-white font-black py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-50 shadow-md">儲存記事</button></div></div> );
+}
+
 function SettingsModal({ onClose, settings, onSave, onExport, theme }) {
   const [budget, setBudget] = useState(settings.monthlyBudget || '');
   const [enableRollover, setEnableRollover] = useState(settings.enableRollover !== false); 
@@ -1180,7 +1077,7 @@ function SettingsModal({ onClose, settings, onSave, onExport, theme }) {
   
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className={`w-full max-w-sm sm:max-w-lg ${theme.cardInner} rounded-t-[2.5rem] sm:rounded-[2rem] p-7 pb-safe shadow-2xl border ${theme.border} max-h-[90vh] overflow-y-auto hide-scrollbar`}>
+      <div className={`w-full max-w-sm sm:max-w-lg ${theme.cardInner} rounded-[2rem] p-7 pb-safe shadow-2xl border ${theme.border} max-h-[90vh] overflow-y-auto hide-scrollbar`}>
         <div className="flex justify-between items-center mb-6">
           <h3 className={`font-black text-2xl ${theme.text}`}>⚙️ 設定與管理</h3>
           <button onClick={onClose} className={`p-2.5 ${theme.bg} ${theme.textMuted} rounded-full hover:opacity-80`}><X className="w-6 h-6" /></button>
@@ -1261,10 +1158,10 @@ function BarcodeModal({ onClose, barcodes, onSaveSettings, onAddTx, onShowToast,
   const [isEditing, setIsEditing] = useState(false); 
   const [isSyncing, setIsSyncing] = useState(false);
   
-  const [hCode, setHCode] = useState(barcodes?.husbandBarcode || ''); 
-  const [wCode, setWCode] = useState(barcodes?.wifeBarcode || ''); 
-  const [hCert, setHCert] = useState(barcodes?.husbandCert || ''); 
-  const [wCert, setWCert] = useState(barcodes?.wifeCert || ''); 
+  const [hCode, setHCode] = useState(barcodes.husbandBarcode || ''); 
+  const [wCode, setWCode] = useState(barcodes.wifeBarcode || ''); 
+  const [hCert, setHCert] = useState(barcodes.husbandCert || ''); 
+  const [wCert, setWCert] = useState(barcodes.wifeCert || ''); 
 
   const displayCode = activeTab === 'husband' ? hCode || '/HUSBAND' : wCode || '/WIFEXXX';
 
@@ -1338,10 +1235,10 @@ function BarcodeModal({ onClose, barcodes, onSaveSettings, onAddTx, onShowToast,
 
 function AddGoalModal({ onClose, onSave, theme }) {
   const [title, setTitle] = useState(''); const [targetAmount, setTargetAmount] = useState('');
-  return (<div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"><div className={`w-full max-w-sm sm:max-w-lg ${theme.cardInner} rounded-t-[2.5rem] sm:rounded-3xl p-7 pb-safe shadow-2xl border ${theme.border}`}><div className="flex justify-between items-center mb-6"><h3 className={`font-black text-xl ${theme.text}`}>🎯 新增目標</h3><button onClick={onClose} className={`p-2.5 ${theme.bg} ${theme.textMuted} rounded-full`}><X className="w-6 h-6" /></button></div><form onSubmit={(e)=>{e.preventDefault(); onSave({title, targetAmount:Number(targetAmount)});}} className="space-y-5"><div><label className={`block text-sm font-bold ${theme.textMuted} mb-2`}>名稱</label><input type="text" value={title} onChange={e => setTitle(e.target.value)} autoFocus className={`w-full ${theme.bg} border ${theme.border} ${theme.text} rounded-xl px-4 py-4 text-base font-bold focus:outline-none`} /></div><div><label className={`block text-sm font-bold ${theme.textMuted} mb-2`}>金額</label><div className="relative"><span className={`absolute left-4 top-1/2 -translate-y-1/2 ${theme.textMuted} font-black text-lg`}>$</span><input type="number" inputMode="decimal" value={targetAmount} onChange={e => setTargetAmount(e.target.value)} className={`w-full ${theme.bg} border ${theme.border} ${theme.text} rounded-xl pl-9 pr-4 py-4 text-base font-bold focus:outline-none`} /></div></div><button type="submit" disabled={!title || !targetAmount} className={`w-full mt-4 ${theme.primary} text-white font-black py-4 rounded-xl disabled:opacity-50 active:scale-95 shadow-md`}>建立</button></form></div></div>);
+  return (<div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"><div className={`w-full max-w-sm sm:max-w-lg ${theme.cardInner} rounded-t-[2.5rem] sm:rounded-3xl p-7 pb-safe shadow-2xl border ${theme.border}`}><div className="flex justify-between items-center mb-6"><h3 className={`font-black text-xl ${theme.text}`}>🎯 新增目標</h3><button onClick={onClose} className={`p-2.5 ${theme.bg} ${theme.textMuted} rounded-full`}><X className="w-6 h-6" /></button></div><form onSubmit={(e)=>{e.preventDefault(); onSave({title, targetAmount:Number(targetAmount)});}} className="space-y-5"><div><label className={`block text-sm font-bold ${theme.textMuted} mb-2`}>名稱</label><input type="text" value={title} onChange={e => setTitle(e.target.value)} autoFocus className={`w-full ${theme.bg} border ${theme.border} ${theme.text} rounded-xl px-4 py-4 text-base font-bold focus:outline-none`} /></div><div><label className={`block text-sm font-bold ${theme.textMuted} mb-2`}>金額</label><div className="relative"><span className={`absolute left-4 top-1/2 -translate-y-1/2 ${theme.textMuted} font-black text-lg`}>$</span><input type="number" inputMode="decimal" value={targetAmount} onChange={e => setTargetAmount(e.target.value)} className={`w-full ${theme.bg} border ${theme.border} ${theme.text} rounded-xl pl-9 pr-4 py-4 text-base font-bold focus:outline-none`} /></div></div><button type="submit" disabled={!title || !targetAmount} className={`w-full mt-4 ${theme.primary} text-white font-black py-4 rounded-xl disabled:opacity-50 active:scale-95 shadow-md`}>建立</button></form></div></div>);
 }
 
 function AddFundsModal({ onClose, onSave, goalName, theme }) {
   const [amount, setAmount] = useState('');
-  return (<div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"><div className={`w-full max-w-sm sm:max-w-lg ${theme.cardInner} rounded-t-[2.5rem] sm:rounded-3xl p-7 pb-safe shadow-2xl border ${theme.border}`}><div className="flex justify-between items-center mb-3"><h3 className={`font-black text-xl ${theme.text}`}>💰 存入資金</h3><button onClick={onClose} className={`p-2.5 ${theme.bg} ${theme.textMuted} rounded-full`}><X className="w-6 h-6" /></button></div><p className={`text-sm ${theme.textMuted} mb-6 font-bold`}>存入 <span className={theme.text}>{goalName}</span></p><form onSubmit={(e)=>{e.preventDefault(); onSave(Number(amount));}} className="space-y-5"><div className={`flex items-baseline justify-center border-b-2 ${theme.border} py-5`}><span className={`text-4xl ${theme.textMuted} mr-2 font-light`}>$</span><input type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} autoFocus placeholder="0" className={`text-6xl font-black bg-transparent ${theme.text} focus:outline-none w-2/3 text-center`} /></div><button type="submit" disabled={!amount} className={`w-full mt-5 ${theme.primary} text-white font-black py-4 rounded-xl disabled:opacity-50 active:scale-95 shadow-md`}>確認存入</button></form></div></div>);
+  return (<div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"><div className={`w-full max-w-sm sm:max-w-lg ${theme.cardInner} rounded-t-[2.5rem] sm:rounded-3xl p-7 pb-safe shadow-2xl border ${theme.border}`}><div className="flex justify-between items-center mb-3"><h3 className={`font-black text-xl ${theme.text}`}>💰 存入資金</h3><button onClick={onClose} className={`p-2.5 ${theme.bg} ${theme.textMuted} rounded-full`}><X className="w-6 h-6" /></button></div><p className={`text-sm ${theme.textMuted} mb-6 font-bold`}>存入 <span className={theme.text}>{goalName}</span></p><form onSubmit={(e)=>{e.preventDefault(); onSave(Number(amount));}} className="space-y-5"><div className={`flex items-baseline justify-center border-b-2 ${theme.border} py-5`}><span className={`text-4xl ${theme.textMuted} mr-2 font-light`}>$</span><input type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} autoFocus placeholder="0" className={`text-6xl font-black bg-transparent ${theme.text} focus:outline-none w-2/3 text-center`} /></div><button type="submit" disabled={!amount} className={`w-full mt-5 ${theme.primary} text-white font-black py-4 rounded-xl disabled:opacity-50 active:scale-95 shadow-md`}>確認存入</button></form></div></div>);
 }
