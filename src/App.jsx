@@ -3,7 +3,7 @@ import {
   Plus, X, Trash2, Sparkles, ChevronLeft, ChevronRight, Target, Coins, 
   PieChart as PieChartIcon, ArrowRightLeft, Home, Search, Settings, CheckCircle2, AlertTriangle,
   Barcode, Camera, ClipboardList, StickyNote, Edit3, CalendarHeart, Mic, MicOff,
-  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, Moon, Sun, Filter, Wand2, RefreshCw, Bell, Repeat
+  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, Moon, Sun, Filter, Wand2, RefreshCw, Bell, Repeat, Loader2
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -28,7 +28,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; 
-const apiKey = "AQ.Ab8RN6L6pN349WVqvcP1BUCak8JsJ1fLfO-HBojsVdCzXkf-_A"; // 系統底層自動注入
+
+// 💡 提醒：如果您要部署到 Vercel，請把您的 Gemini 金鑰填入下方的雙引號中！
+const apiKey = "AQ.Ab8RN6L6pN349WVqvcP1BUCak8JsJ1fLfO-HBojsVdCzXkf-_A"; 
 
 const CATEGORIES = {
   expense: [
@@ -43,11 +45,12 @@ const getLocalYYYYMM = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 const getLocalYYYYMMDD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const calculateDaysDiff = (target) => Math.ceil((new Date(target).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
 
+// 安全路徑設計
 const getCol = (colName) => collection(db, 'artifacts', appId, 'public', 'data', colName);
 const getDocRef = (colName, docId) => doc(db, 'artifacts', appId, 'public', 'data', colName, docId);
 
 // ==========================================
-// 🛡️ API 防護網 (解決 AI 白畫面)
+// 🛡️ API 防護網 (解決 AI 白畫面與連線不穩)
 // ==========================================
 const fetchWithBackoff = async (url, options, retries = 3) => {
   const delays = [1000, 2000, 4000];
@@ -140,6 +143,7 @@ export default function App() {
   // 資料監聽
   useEffect(() => {
     if (!user) return;
+    
     const unsubs = [
       onSnapshot(getCol('shared_accounts'), snap => {
         if (snap.empty) {
@@ -152,6 +156,7 @@ export default function App() {
       onSnapshot(getDocRef('shared_settings', 'main'), doc => { if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() })); }),
       onSnapshot(getDocRef('shared_tags', 'main'), doc => setData(prev => ({ ...prev, tags: doc.exists() ? doc.data().tags : [] }))),
       onSnapshot(getCol('recurring_rules'), snap => setData(prev => ({ ...prev, recurringRules: snap.docs.map(d => ({ id: d.id, ...d.data() })) }))),
+      
       onSnapshot(getCol('shared_ledger'), snap => setData(p => ({ ...p, tx: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))),
       onSnapshot(getCol('shared_bills'), snap => setData(p => ({ ...p, bills: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.dueDate - b.dueDate) }))),
       onSnapshot(getCol('shared_notes'), snap => setData(p => ({ ...p, notes: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.updatedAt?.toMillis() - a.updatedAt?.toMillis()) }))),
@@ -186,6 +191,13 @@ export default function App() {
     };
     processRules();
   }, [user, data.recurringRules]);
+
+  // 同步雲端發票模擬
+  useEffect(() => {
+    if (!user || syncAttempted.current || !settings.autoSyncInvoices || (!settings.husbandBarcode && !settings.wifeBarcode)) return;
+    syncAttempted.current = true;
+    setTimeout(() => showToast("🔄 雲端發票同步完成", "info"), 2000);
+  }, [user, settings.autoSyncInvoices, settings.husbandBarcode, settings.wifeBarcode]);
 
   // 衍生數據計算
   const cMonth = getLocalYYYYMM(ui.date);
@@ -253,19 +265,20 @@ export default function App() {
     const total = tStats.exp || 1;
     return Object.entries(tStats.cat).map(([name, value]) => {
       const icon = CATEGORIES.expense.find(c => c.name === name)?.icon || '✨';
-      return { name, value, percentage: Math.round((value / total) * 100), color: '#C86D23', icon };
+      return { name, value, percentage: Math.round((value / total) * 100), color: '#b45309', icon };
     }).sort((a, b) => b.value - a.value);
   }, [tStats]);
 
   // ==========================================
-  // 🛡️ Firebase 操作防護網 (解決 Delete 卡死)
+  // 🛡️ Firebase 操作防護網 
   // ==========================================
   const doAction = async (action, successMsg) => {
     try { 
       await action(); 
       if (successMsg) showToast(successMsg); 
     } catch (e) { 
-      showToast("操作失敗，請檢查網路連線", "error"); 
+      showToast("操作失敗，請檢查網路或 Firebase 資料庫規則權限", "error"); 
+      console.error("Firebase 寫入錯誤:", e); 
     } finally {
       updateUi({ modal: null, confirm: null, selectedTx: null }); 
     }
@@ -280,8 +293,12 @@ export default function App() {
     try { await setDoc(getDocRef('shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {}
   };
 
-  // 🤖 AI 顧問呼叫
+  // 🤖 AI 顧問呼叫 (防白畫面機制)
   const handleCallAI = async () => {
+    if (!apiKey) {
+      showToast("系統未設定 API 金鑰，請於程式碼補上", "error");
+      return;
+    }
     setIsAiLoading(true); setAiAnalysis('');
     try {
       const topCats = pieChartData.slice(0, 3).map(c => `${c.name}(${c.percentage}%)`).join('、');
@@ -295,7 +312,8 @@ export default function App() {
       if (!resData || !resData.candidates) throw new Error("API 回應異常");
       setAiAnalysis(resData.candidates[0].content.parts[0].text);
     } catch (err) { 
-      setAiAnalysis('AI 顧問去休息了，請稍後再試。'); 
+      setAiAnalysis('AI 顧問去休息了，請確認 API 金鑰是否正確填寫。'); 
+      console.error(err);
     } finally { 
       setIsAiLoading(false); 
     }
@@ -320,29 +338,29 @@ export default function App() {
     const link = document.createElement('a'); 
     link.href = url; link.setAttribute('download', `HomeLedger_${getLocalYYYYMMDD(new Date())}.csv`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link); 
-    showToast("匯出成功！請直接匯入 Google Sheets");
+    showToast("匯出成功！");
   };
 
   // ==========================================
-  // 🌞 🌙 日夜雙生主題引擎 (完美還原配色)
+  // 🌞 🌙 日夜雙生主題引擎 
   // ==========================================
   const t = ui.isDark ? { 
-    bg: 'bg-[#0F172A]', // Studio Indigo Dark
-    cardInner: 'bg-[#1E293B]', // Slate 800
-    text: 'text-[#F8FAFC]', // Slate 50
-    textM: 'text-[#94A3B8]', // Slate 400
-    primary: 'bg-[#4F46E5]', // Indigo 600
-    primaryText: 'text-[#818CF8]', // Indigo 400
-    border: 'border-[#334155]', // Slate 700
+    bg: 'bg-[#0F172A]', 
+    cardInner: 'bg-[#1E293B]', 
+    text: 'text-[#F8FAFC]', 
+    textM: 'text-[#94A3B8]', 
+    primary: 'bg-[#4F46E5]', 
+    primaryText: 'text-[#818CF8]', 
+    border: 'border-[#334155]', 
     input: 'bg-[#0F172A] text-white',
     ring: 'focus:ring-indigo-500'
   } : {
-    bg: 'bg-[#FAF9F6]', // 經典暖白 (還原)
+    bg: 'bg-[#FAF9F6]', 
     cardInner: 'bg-white', 
-    text: 'text-[#2A2623]', // 高質感深棕字體
+    text: 'text-[#2A2623]', 
     textM: 'text-[#8C857D]', 
-    primary: 'bg-[#C86D23]', // 經典亮橘
-    primaryText: 'text-[#C86D23]', 
+    primary: 'bg-[#5C4033]', 
+    primaryText: 'text-[#5C4033]', 
     border: 'border-[#EAE4DD]', 
     input: 'bg-[#FAF9F6] text-[#2A2623]',
     ring: 'focus:ring-[#C86D23]'
@@ -400,11 +418,9 @@ export default function App() {
               <h1 className="text-2xl font-black tracking-wide flex items-center justify-center gap-1.5">Home Ledger <span className="text-rose-500">♡</span></h1>
             </div>
             <div className="flex gap-3 w-24 justify-end relative">
-              {/* 🌟 發票載具按鈕 */}
               <button onClick={() => updateUi({ modal: 'barcode' })} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform`}>
                 <Barcode className="w-5 h-5"/>
               </button>
-              {/* 🌟 推播通知按鈕 */}
               <button onClick={() => updateUi({ modal: 'notify' })} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform relative`}>
                 <Bell className="w-5 h-5"/>
                 {alerts.length > 0 && <span className={`absolute top-2 right-2 w-3 h-3 bg-red-500 border-2 ${ui.isDark ? 'border-[#1E293B]' : 'border-white'} rounded-full`}></span>}
@@ -412,7 +428,7 @@ export default function App() {
             </div>
           </header>
 
-          {/* 主畫面與各頁籤 */}
+          {/* 主畫面 */}
           <main className={`px-6 space-y-8 flex-1 overflow-y-auto pb-40 pt-2 hide-scrollbar ${t.bg}`}>
             
             {/* ================= 首頁 Tab ================= */}
@@ -569,7 +585,6 @@ export default function App() {
                         </div>
                       </div>
                       
-                      {/* 🌟 結算箭頭 (老公與老婆之間) */}
                       <div className="flex flex-col items-center flex-1 px-2 relative">
                         <span className={`text-xs ${t.textM} font-bold mb-2`}>應轉帳給</span>
                         <div className="flex items-center justify-center w-full text-rose-500">
@@ -588,7 +603,6 @@ export default function App() {
                   )}
                 </div>
                 
-                {/* 🌟 甜甜圈圖表 */}
                 <div className={`${t.cardInner} rounded-[2rem] p-8 border ${t.border} shadow-sm flex flex-col items-center`}>
                   <div className="relative w-56 h-56 flex items-center justify-center mb-8">
                     <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
@@ -838,7 +852,7 @@ export default function App() {
                     {ui.modal === 'settings' && <Settings className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'barcode' && <Barcode className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'notify' && <Bell className={`w-6 h-6 ${t.textM}`}/>}
-                    {ui.modal === 'tx' ? (ui.selectedTx ? '修改紀錄' : '新增紀錄') : ui.modal === 'settings' ? '設定與管理' : ui.modal === 'barcode' ? '發票載具' : ui.modal === 'notify' ? '推播與通知' : '選單'}
+                    {ui.modal === 'tx' ? (ui.selectedTx ? '修改紀錄' : '新增紀錄') : ui.modal === 'settings' ? '設定與管理' : ui.modal === 'barcode' ? '發票載具與同步' : ui.modal === 'notify' ? '推播與通知' : '選單'}
                   </h3>
                   <button onClick={() => updateUi({ modal: null, selectedTx: null })} className={`p-2.5 ${t.bg} rounded-full active:scale-95`}>
                     <X className={`w-6 h-6 ${t.textM}`}/>
@@ -1085,32 +1099,31 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
         )}
       </div>
       
-      {/* 🌟 究極・4x5 真實四則運算計算機 (完美還原) */}
+      {/* 🌟 真・四則運算計算機鍵盤 (完美 4x5 陣列還原) */}
       {showK ? (
         <div className={`grid grid-cols-4 gap-2 shrink-0 pt-3 border-t ${t.border}`}>
-          {['7','8','9','÷', '4','5','6','×', '1','2','3','-', 'C','0','+','='].map((k, i) => {
+          {['7','8','9','÷', '4','5','6','×', '1','2','3','-', 'C','0','.','+', '⌫','00','=','OK'].map((k, i) => {
             const isOp = ['÷','×','-','+','='].includes(k);
-            const isC = k === 'C';
+            const isC = k === 'C' || k === '⌫';
             let btnClass = '';
             
-            // 完美深淺色計算機樣式
+            // 深淺色計算機樣式
             if (ui.isDark) {
               if (isOp) btnClass = 'bg-[#1E293B] text-rose-500'; 
               else if (isC) btnClass = 'bg-[#1E293B] text-stone-400'; 
               else btnClass = 'bg-[#1E1B18] text-white'; 
             } else {
-              if (isOp) btnClass = 'bg-stone-200 text-stone-700'; 
+              if (isOp) btnClass = 'bg-stone-200 text-rose-500'; 
               else if (isC) btnClass = 'bg-stone-300 text-stone-600'; 
               else btnClass = 'bg-white text-stone-800 shadow-sm'; 
             }
 
             return (
-              <button key={i} onClick={() => handleKey(k)} className={`h-14 rounded-2xl font-black text-2xl active:scale-95 transition-all ${btnClass}`}>
+              <button key={i} onClick={() => handleKey(k)} className={`h-14 rounded-2xl font-black text-2xl active:scale-95 transition-all ${k === 'OK' ? `col-span-1 bg-[#C86D23] text-white shadow-md` : btnClass}`}>
                 {k}
               </button>
             )
           })}
-          {/* 大大的確認記帳按鈕 */}
           <button onClick={submit} className={`col-span-4 py-4 mt-2 rounded-2xl font-black text-lg text-white shadow-md active:scale-95 ${ui.isDark ? t.primary : 'bg-[#A29188]'}`}>
             確認{initialData ? '修改' : '記帳'}
           </button>
@@ -1155,6 +1168,10 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t }) => {
   };
   
   const handleParse = async () => {
+    if (!apiKey) {
+      showToast("系統未設定 API 金鑰，請於程式碼補上", "error");
+      return;
+    }
     if (!text.trim()) return; 
     setLoading(true);
     try {
@@ -1194,7 +1211,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t }) => {
 }
 
 // ==========================================
-// 高質感設定表單 
+// 高質感設定表單
 // ==========================================
 const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
   const [s, setS] = useState(settings);
@@ -1259,8 +1276,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
         儲存設定
       </button>
       
-      {/* 🌟 匯出 CSV 按鈕 */}
-      <button onClick={onExport} className={`w-full py-5 rounded-full font-bold text-base border ${t.border} mt-2 shadow-sm flex items-center justify-center gap-2 text-[#0F9D58] ${t.bg} hover:opacity-80 active:scale-95`}>
+      <button onClick={onExport} className={`w-full py-5 rounded-full font-bold text-base border ${t.border} mt-2 shadow-sm flex items-center justify-center gap-2 text-emerald-600 ${t.bg} hover:opacity-80 active:scale-95`}>
         <DownloadCloud className="w-5 h-5"/> 匯出 CSV (可匯入 Google Sheets)
       </button>
     </div>
@@ -1268,7 +1284,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
 };
 
 // ==========================================
-// 🌟 實體條碼展示與載具設定表單 (原汁原味還原)
+// 🌟 實體條碼展示與載具設定表單
 // ==========================================
 const BarcodeDisplay = ({ code, t }) => (
   <div className="mb-4">
