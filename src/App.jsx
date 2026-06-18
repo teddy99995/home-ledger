@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 
 // ==========================================
-// 1. 核心設定與資料庫初始化
+// 1. 核心設定與資料庫初始化 (智慧路徑)
 // ==========================================
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
   apiKey: "AIzaSyCegdtoILGfQEQqp7hzK5q--if0hViIOF8",
@@ -27,10 +27,9 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__f
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; 
 
-// 💡 提醒：如果您要部署到 Vercel，請把您的 Gemini 金鑰填入下方的雙引號中！
-const apiKey = "AQ.Ab8RN6L6pN349WVqvcP1BUCak8JsJ1fLfO-HBojsVdCzXkf-_A"; 
+// 🤖 您的專屬 Gemini API 金鑰已成功注入！
+const apiKey = "AQ.Ab8RN6I0J3wmxvelps37vp9okT6cneQkCDInTriShO0lX7dtSA"; 
 
 const CATEGORIES = {
   expense: [
@@ -45,12 +44,25 @@ const getLocalYYYYMM = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 const getLocalYYYYMMDD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const calculateDaysDiff = (target) => Math.ceil((new Date(target).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
 
-// 安全路徑設計
-const getCol = (colName) => collection(db, 'artifacts', appId, 'public', 'data', colName);
-const getDocRef = (colName, docId) => doc(db, 'artifacts', appId, 'public', 'data', colName, docId);
+// 🔥 智慧資料庫路徑設計 (完美修復 Vercel 上 indexOf 報錯問題)
+const isCanvas = typeof __app_id !== 'undefined';
+const safeAppId = isCanvas ? String(__app_id) : ''; 
+
+const getCol = (colName) => {
+  return isCanvas 
+    ? collection(db, 'artifacts', safeAppId, 'public', 'data', String(colName))
+    : collection(db, String(colName)); 
+};
+
+const getDocRef = (colName, docId) => {
+  if (!docId) throw new Error("無效的資料 ID");
+  return isCanvas
+    ? doc(db, 'artifacts', safeAppId, 'public', 'data', String(colName), String(docId))
+    : doc(db, String(colName), String(docId)); 
+};
 
 // ==========================================
-// 🛡️ API 防護網 (解決 AI 白畫面與連線不穩)
+// 🛡️ API 防護網 (解決 AI 白畫面)
 // ==========================================
 const fetchWithBackoff = async (url, options, retries = 3) => {
   const delays = [1000, 2000, 4000];
@@ -101,6 +113,9 @@ export default function App() {
     isDark: false, confirm: null, selectedItem: null, toast: null, selectedTx: null 
   });
   
+  // 🔔 紀錄已點擊 X 關閉的通知
+  const [dismissedAlerts, setDismissedAlerts] = useState([]);
+
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState('');
   
@@ -253,13 +268,16 @@ export default function App() {
     return { status: 'settled' };
   }, [tStats]);
 
-  const alerts = useMemo(() => {
+  // 🔔 系統通知
+  const rawAlerts = useMemo(() => {
     const a = []; const today = new Date().getDate(); const notifyDays = settings.notifyAdvanceDays || 3;
-    if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期`, time: '系統' }); });
-    if (settings.notifyEvents) data.events.forEach(e => { const d = calculateDaysDiff(e.date); if (d >= 0 && d <= notifyDays) a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天`, time: '系統' }); });
-    if (settings.notifyLargeExpense) mTx.slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}`, time: t.date }); });
+    if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期` }); });
+    if (settings.notifyEvents) data.events.forEach(e => { const d = calculateDaysDiff(e.date); if (d >= 0 && d <= notifyDays) a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天` }); });
+    if (settings.notifyLargeExpense) mTx.slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}` }); });
     return a;
   }, [data, settings, mTx]);
+
+  const activeAlerts = rawAlerts.filter(a => !dismissedAlerts.includes(a.id));
 
   const pieChartData = useMemo(() => {
     const total = tStats.exp || 1;
@@ -270,15 +288,21 @@ export default function App() {
   }, [tStats]);
 
   // ==========================================
-  // 🛡️ Firebase 操作防護網 
+  // 🛡️ Firebase 操作防護網 (完美防護 Vercel 崩潰)
   // ==========================================
   const doAction = async (action, successMsg) => {
     try { 
       await action(); 
       if (successMsg) showToast(successMsg); 
     } catch (e) { 
-      showToast("操作失敗，請檢查網路或 Firebase 資料庫規則權限", "error"); 
-      console.error("Firebase 寫入錯誤:", e); 
+      console.error("Firebase 執行錯誤:", e);
+      if (e.message?.includes('undefined') || e.message?.includes('indexOf')) {
+         showToast("操作失敗：找不到該筆資料", "error"); 
+      } else if (e.code === 'permission-denied') {
+         showToast("權限不足：請檢查 Firebase 資料庫的 Rules", "error");
+      } else {
+         showToast(`操作失敗: ${e.message}`, "error"); 
+      }
     } finally {
       updateUi({ modal: null, confirm: null, selectedTx: null }); 
     }
@@ -293,7 +317,7 @@ export default function App() {
     try { await setDoc(getDocRef('shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {}
   };
 
-  // 🤖 AI 顧問呼叫 (防白畫面機制)
+  // 🤖 AI 顧問呼叫 (使用穩定的 1.5-flash 模型，避免 401 白畫面)
   const handleCallAI = async () => {
     if (!apiKey) {
       showToast("系統未設定 API 金鑰，請於程式碼補上", "error");
@@ -305,14 +329,14 @@ export default function App() {
       let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老公需給老婆${Math.round(settlement.amt)}` : `老婆需給老公${Math.round(settlement.amt)}`);
       const prompt = `夫妻本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
       
-      const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, { 
+      const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, { 
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) 
       });
       
-      if (!resData || !resData.candidates) throw new Error("API 回應異常");
+      if (!resData || !resData.candidates) throw new Error("API 遭到拒絕");
       setAiAnalysis(resData.candidates[0].content.parts[0].text);
     } catch (err) { 
-      setAiAnalysis('AI 顧問去休息了，請確認 API 金鑰是否正確填寫。'); 
+      setAiAnalysis(`AI 服務連線異常，請檢查金鑰或稍後再試。`); 
       console.error(err);
     } finally { 
       setIsAiLoading(false); 
@@ -399,7 +423,7 @@ export default function App() {
             <div className="fixed top-6 left-0 right-0 z-[100] flex justify-center px-4 animate-in slide-in-from-top-4">
               <div className={`flex items-center gap-3 px-6 py-4 rounded-full shadow-2xl border ${t.cardInner} ${t.border} ${t.text}`}>
                 <CheckCircle2 className={`w-6 h-6 ${ui.toast.type === 'error' ? 'text-red-500' : 'text-emerald-500'}`} />
-                <span className="font-bold text-base">{ui.toast.msg}</span>
+                <span className="font-bold text-base truncate max-w-xs">{ui.toast.msg}</span>
               </div>
             </div>
           )}
@@ -423,7 +447,7 @@ export default function App() {
               </button>
               <button onClick={() => updateUi({ modal: 'notify' })} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform relative`}>
                 <Bell className="w-5 h-5"/>
-                {alerts.length > 0 && <span className={`absolute top-2 right-2 w-3 h-3 bg-red-500 border-2 ${ui.isDark ? 'border-[#1E293B]' : 'border-white'} rounded-full`}></span>}
+                {activeAlerts.length > 0 && <span className={`absolute top-2 right-2 w-3 h-3 bg-red-500 border-2 ${ui.isDark ? 'border-[#1E293B]' : 'border-white'} rounded-full`}></span>}
               </button>
             </div>
           </header>
@@ -865,14 +889,27 @@ export default function App() {
                     accounts={data.accounts} cats={CATEGORIES} tags={data.tags} initialData={ui.selectedTx} 
                     onAI={() => updateUi({ modal: 'ai' })} onAddTag={handleAddGlobalTag}
                     onSave={(txData) => { 
-                      if(txData.id) doAction(() => updateDoc(getDocRef('shared_ledger', txData.id), {...txData, updatedAt: serverTimestamp()}), '修改成功'); 
-                      else doAction(() => addDoc(getCol('shared_ledger'), {...txData, date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date), createdAt: serverTimestamp(), createdBy: user.uid}), '記帳成功'); 
+                      const { id, ...payload } = txData;
+                      payload.updatedAt = serverTimestamp();
+                      
+                      // 🛡️ 移除可能導致崩潰的 undefined 欄位
+                      Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
+
+                      if(id) {
+                        doAction(() => updateDoc(getDocRef('shared_ledger', id), payload), '修改成功'); 
+                      } else {
+                        payload.date = getLocalYYYYMMDD(ui.date);
+                        payload.month = getLocalYYYYMM(ui.date);
+                        payload.createdAt = serverTimestamp();
+                        payload.createdBy = user ? user.uid : 'unknown';
+                        doAction(() => addDoc(getCol('shared_ledger'), payload), '記帳成功'); 
+                      }
                     }} 
                     t={t} ui={ui}
                   />
                 )}
                 {ui.modal === 'ai' && (
-                  <AIForm cats={CATEGORIES} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} onSave={(txData) => doAction(() => addDoc(getCol('shared_ledger'), {...txData, date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date), createdAt: serverTimestamp(), createdBy: user.uid}), 'AI 記帳成功')} showToast={showToast} t={t} />
+                  <AIForm cats={CATEGORIES} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} onSave={(txData) => doAction(() => addDoc(getCol('shared_ledger'), {...txData, date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date), createdAt: serverTimestamp(), createdBy: user ? user.uid : 'unknown'}), 'AI 記帳成功')} showToast={showToast} t={t} />
                 )}
                 {ui.modal === 'date' && (
                   <div className="grid grid-cols-3 gap-3">
@@ -897,25 +934,36 @@ export default function App() {
                 {ui.modal === 'barcode' && (
                   <BarcodeForm codes={{h:settings.husbandBarcode, hC:settings.husbandCert, w:settings.wifeBarcode, wC:settings.wifeCert}} onSave={(h,hC,w,wC) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), {husbandBarcode:h, husbandCert:hC, wifeBarcode:w, wifeCert:wC}, {merge:true}), '載具已儲存')} onSync={() => { showToast("成功抓取最新發票！"); updateUi({modal: null}); }} t={t} />
                 )}
-                {/* 🌟 完美的推播與通知面板 */}
+                
+                {/* 🌟 完美的推播與通知面板 (新增消掉按鈕 X) */}
                 {ui.modal === 'notify' && (
                   <div className="space-y-4">
-                    {alerts.length === 0 ? (
+                    {activeAlerts.length === 0 ? (
                       <div className={`flex flex-col items-center justify-center py-16 text-center ${t.textM}`}>
                         <Bell className="w-16 h-16 mb-4 opacity-50" />
                         <span className="font-bold text-lg">目前沒有任何新通知 🎉</span>
                       </div>
-                    ) : alerts.map(a => (
-                      <div key={a.id} className={`p-5 rounded-3xl border ${t.border} ${t.bg} flex gap-4 items-center shadow-sm`}>
-                        <span className={`text-3xl ${t.cardInner} w-14 h-14 flex items-center justify-center rounded-full shadow-sm`}>{a.icon}</span>
-                        <div>
-                          <div className="font-extrabold text-lg mb-1">{a.title}</div>
-                          <div className={`text-sm font-bold ${t.textM}`}>{a.desc}</div>
+                    ) : activeAlerts.map(a => (
+                      <div key={a.id} className={`flex items-center gap-4 p-5 rounded-3xl border ${t.border} ${t.bg} relative shadow-sm`}>
+                        <div className={`w-14 h-14 rounded-full ${t.cardInner} flex items-center justify-center text-3xl shadow-sm shrink-0`}>
+                          {a.icon}
                         </div>
+                        <div className="flex-1 pr-6">
+                          <h4 className="font-extrabold text-lg mb-1">{a.title}</h4>
+                          <p className={`text-sm font-bold ${t.textM}`}>{a.desc}</p>
+                        </div>
+                        {/* 🌟 單獨關閉該通知的按鈕 */}
+                        <button 
+                          onClick={() => setDismissedAlerts(prev => [...prev, a.id])} 
+                          className={`absolute top-5 right-5 text-stone-400 hover:text-rose-500 active:scale-95 transition-colors`}
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
                       </div>
                     ))}
                   </div>
                 )}
+                
                 {ui.modal === 'account' && (
                   <AccForm onSave={d => doAction(() => addDoc(getCol('shared_accounts'), {...d, createdAt: serverTimestamp()}), '帳戶建立')} t={t} />
                 )}
@@ -923,7 +971,25 @@ export default function App() {
                   <BillForm onSave={d => doAction(() => addDoc(getCol('shared_bills'), {...d, isPaid: false, createdAt: serverTimestamp()}), '帳單建立')} t={t} />
                 )}
                 {ui.modal === 'note' && (
-                  <NoteForm data={ui.selectedItem} onSave={d => doAction(() => d.id ? updateDoc(getDocRef('shared_notes', d.id), {...d, updatedAt: serverTimestamp()}) : addDoc(getCol('shared_notes'), {...d, createdAt: serverTimestamp(), updatedAt: serverTimestamp()}), '儲存成功')} onDelete={id => confirmDel('刪除筆記？', () => deleteDoc(getDocRef('shared_notes', id)))} t={t} />
+                  <NoteForm 
+                    data={ui.selectedItem} 
+                    onSave={d => {
+                      const { id, ...payload } = d;
+                      payload.updatedAt = serverTimestamp();
+                      
+                      // 🛡️ 防護：過濾掉 undefined
+                      Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
+                      
+                      if (id) {
+                        doAction(() => updateDoc(getDocRef('shared_notes', id), payload), '修改成功');
+                      } else {
+                        payload.createdAt = serverTimestamp();
+                        doAction(() => addDoc(getCol('shared_notes'), payload), '新增成功');
+                      }
+                    }} 
+                    onDelete={id => confirmDel('刪除筆記？', () => deleteDoc(getDocRef('shared_notes', id)))} 
+                    t={t} 
+                  />
                 )}
                 {ui.modal === 'event' && (
                   <EventForm onSave={d => doAction(() => addDoc(getCol('shared_events'), {...d, createdAt: serverTimestamp()}), '建立成功')} t={t} />
@@ -959,7 +1025,7 @@ export default function App() {
 // 4. 獨立子組件庫 (Forms & Modals)
 // ==========================================
 
-// 🌟 記帳表單 (含真四則運算 4x5 計算機)
+// 🌟 記帳表單 (含真四則運算 4x4 計算機)
 const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, ui }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, type: initialData?.type || 'expense', category: initialData?.category || cats.expense[0].name, 
@@ -1099,7 +1165,7 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
         )}
       </div>
       
-      {/* 🌟 真・四則運算計算機鍵盤 (完美 4x5 陣列還原) */}
+      {/* 🌟 真・四則運算計算機鍵盤 */}
       {showK ? (
         <div className={`grid grid-cols-4 gap-2 shrink-0 pt-3 border-t ${t.border}`}>
           {['7','8','9','÷', '4','5','6','×', '1','2','3','-', 'C','0','.','+', '⌫','00','=','OK'].map((k, i) => {
@@ -1107,11 +1173,10 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
             const isC = k === 'C' || k === '⌫';
             let btnClass = '';
             
-            // 深淺色計算機樣式
             if (ui.isDark) {
               if (isOp) btnClass = 'bg-[#1E293B] text-rose-500'; 
               else if (isC) btnClass = 'bg-[#1E293B] text-stone-400'; 
-              else btnClass = 'bg-[#1E1B18] text-white'; 
+              else btnClass = 'bg-[#111827] text-white'; 
             } else {
               if (isOp) btnClass = 'bg-stone-200 text-rose-500'; 
               else if (isC) btnClass = 'bg-stone-300 text-stone-600'; 
@@ -1119,12 +1184,12 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
             }
 
             return (
-              <button key={i} onClick={() => handleKey(k)} className={`h-14 rounded-2xl font-black text-2xl active:scale-95 transition-all ${k === 'OK' ? `col-span-1 bg-[#C86D23] text-white shadow-md` : btnClass}`}>
+              <button key={i} onClick={() => handleKey(k)} className={`h-16 rounded-2xl font-black text-2xl active:scale-95 transition-all ${k === 'OK' ? `col-span-1 ${t.primary} text-white shadow-md` : btnClass}`}>
                 {k}
               </button>
             )
           })}
-          <button onClick={submit} className={`col-span-4 py-4 mt-2 rounded-2xl font-black text-lg text-white shadow-md active:scale-95 ${ui.isDark ? t.primary : 'bg-[#A29188]'}`}>
+          <button onClick={submit} className={`col-span-4 py-4 mt-1 rounded-2xl font-black text-lg text-white shadow-md active:scale-95 ${ui.isDark ? t.primary : 'bg-[#A29188]'}`}>
             確認{initialData ? '修改' : '記帳'}
           </button>
         </div>
@@ -1138,7 +1203,7 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
 };
 
 // ==========================================
-// 🌟 AI 語音記帳表單
+// 🌟 AI 語音記帳表單 
 // ==========================================
 const AIForm = ({ cats, accounts, onBack, onSave, showToast, t }) => {
   const [text, setText] = useState(''); 
@@ -1169,13 +1234,13 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t }) => {
   
   const handleParse = async () => {
     if (!apiKey) {
-      showToast("系統未設定 API 金鑰，請於程式碼補上", "error");
+      showToast("系統未設定 API 金鑰，無法啟用 AI 服務", "error");
       return;
     }
     if (!text.trim()) return; 
     setLoading(true);
     try {
-       const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+       const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             contents: [{ parts: [{ text: `請將以下語言記帳轉換為JSON。語言：「${text}」。這是家庭帳本。必填欄位：amount(數字), category(從[${cats.expense.map(c=>c.name).join(',')}]選), type('expense'/'income'/'transfer'), accountId(選擇一個 ID: [${accounts.map(a=>`${a.name}:${a.id}`).join(',')}]), payer('husband'/'wife'/'joint'), note(備註)。若無法判斷則填預設值。` }] }], 
@@ -1198,8 +1263,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t }) => {
       <button onClick={onBack} className={`text-sm font-bold ${t.textM} mb-2 flex items-center gap-1.5 shrink-0`}><ChevronLeft className="w-4 h-4"/> 返回手動記帳</button>
       <div className="relative flex-1">
         <textarea value={text} onChange={e => setText(e.target.value)} placeholder="點擊右下角麥克風說話，例如：「昨天去全聯買便當花了 200，老婆付的...」" className={`w-full h-full p-6 rounded-3xl font-bold text-xl resize-none focus:ring-2 ${t.ring} ${t.bg} border-none outline-none`} />
-        {/* 🎙️ 語音按鈕 */}
-        <button onClick={toggleListening} className={`absolute bottom-5 right-5 p-5 rounded-full shadow-2xl transition-transform ${isListening ? 'bg-rose-500 text-white animate-pulse scale-110' : `bg-[#C86D23] text-white hover:scale-105`}`}>
+        <button onClick={toggleListening} className={`absolute bottom-5 right-5 p-5 rounded-full shadow-2xl transition-transform ${isListening ? 'bg-rose-500 text-white animate-pulse scale-110' : `${t.primary} text-white hover:scale-105`}`}>
           {isListening ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
         </button>
       </div>
@@ -1286,16 +1350,25 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
 // ==========================================
 // 🌟 實體條碼展示與載具設定表單
 // ==========================================
-const BarcodeDisplay = ({ code, t }) => (
-  <div className="mb-4">
-    <div className={`bg-white border-2 border-stone-200 rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm`}>
-       <div className="flex gap-1.5 h-16 mb-4 w-full justify-center opacity-80">
-         {[1,0,1,1,0,1,0,0,1,1,1,0,1,0,1,1,0,0,1,0,1,1].map((v,i) => <div key={i} className={`w-1.5 h-full ${v ? 'bg-[#2A2623]' : 'bg-transparent'}`}></div>)}
-       </div>
-       <span className="font-mono font-black text-2xl text-[#2A2623] tracking-[0.2em]">{code || '尚未設定'}</span>
+const BarcodeDisplay = ({ code, t }) => {
+  const safeCode = code ? encodeURIComponent(code) : '';
+  const barcodeUrl = safeCode ? `https://bwipjs-api.metafloor.com/?bcid=code39&text=${safeCode}&scale=3&height=12&includetext=false` : null;
+
+  return (
+    <div className="mb-4">
+      <div className={`bg-white border-2 border-stone-200 rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm min-h-[140px]`}>
+         {barcodeUrl ? (
+           <img src={barcodeUrl} alt="Barcode" className="w-full h-20 object-contain mb-4 mix-blend-multiply" />
+         ) : (
+           <div className="flex gap-1.5 h-16 mb-4 w-full justify-center opacity-30">
+             {[1,0,1,1,0,1,0,0,1,1,1,0,1,0,1,1,0,0,1,0,1,1].map((v,i) => <div key={i} className={`w-1.5 h-full ${v ? 'bg-[#2A2623]' : 'bg-transparent'}`}></div>)}
+           </div>
+         )}
+         <span className="font-mono font-black text-2xl text-[#2A2623] tracking-[0.2em]">{code || '尚未設定'}</span>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const BarcodeForm = ({ codes, onSave, onSync, t }) => {
   const [tab, setTab] = useState('h');
@@ -1331,7 +1404,6 @@ const BarcodeForm = ({ codes, onSave, onSync, t }) => {
         </div>
       )}
 
-      {/* 🌟 翠綠色發票同步按鈕 */}
       <button onClick={onSync} className="w-full py-4 rounded-full font-bold text-sm text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center gap-2 shadow-sm active:scale-95">
         <RefreshCw className="w-5 h-5"/> 手動同步最新發票
       </button>
