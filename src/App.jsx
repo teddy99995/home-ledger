@@ -28,8 +28,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 🤖 您的專屬 Gemini API 金鑰已成功注入！
-const apiKey = "AQ.Ab8RN6I0J3wmxvelps37vp9okT6cneQkCDInTriShO0lX7dtSA"; 
+// 🤖 您的專屬 Gemini API 金鑰已成功注入！(支援最新的 AQ. 開頭格式)
+const apiKey = "AQ.Ab8RN6IGQJKzJJVS174E0SIXvfeP77R9_AfKrNnl2Il0XsXdDQ"; 
 
 const CATEGORIES = {
   expense: [
@@ -317,9 +317,9 @@ export default function App() {
     try { await setDoc(getDocRef('shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {}
   };
 
-  // 🤖 AI 顧問呼叫 (使用穩定的 1.5-flash 模型，避免 401 白畫面)
+  // 🤖 AI 顧問呼叫
   const handleCallAI = async () => {
-    if (!apiKey) {
+    if (!apiKey || apiKey.includes("請把AIzaSy")) {
       showToast("系統未設定 API 金鑰，請於程式碼補上", "error");
       return;
     }
@@ -607,6 +607,7 @@ export default function App() {
                         <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl ${settlement.who === 'husband' ? 'bg-[#EAE0D5]' : 'bg-[#FEF0C7]'}`}>
                           {settlement.who === 'husband' ? '👨' : '👩'}
                         </div>
+                        <span className={`text-[10px] font-bold mt-2 ${t.textM}`}>{settlement.who === 'husband' ? '老公' : '老婆'}</span>
                       </div>
                       
                       <div className="flex flex-col items-center flex-1 px-2 relative">
@@ -622,6 +623,7 @@ export default function App() {
                         <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl ${settlement.to === 'husband' ? 'bg-[#EAE0D5]' : 'bg-[#FEF0C7]'}`}>
                           {settlement.to === 'husband' ? '👨' : '👩'}
                         </div>
+                        <span className={`text-[10px] font-bold mt-2 ${t.textM}`}>{settlement.to === 'husband' ? '老公' : '老婆'}</span>
                       </div>
                     </div>
                   )}
@@ -1233,7 +1235,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t }) => {
   };
   
   const handleParse = async () => {
-    if (!apiKey) {
+    if (!apiKey || apiKey.includes("請把AIzaSy")) {
       showToast("系統未設定 API 金鑰，無法啟用 AI 服務", "error");
       return;
     }
@@ -1340,7 +1342,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
         儲存設定
       </button>
       
-      <button onClick={onExport} className={`w-full py-5 rounded-full font-bold text-base border ${t.border} mt-2 shadow-sm flex items-center justify-center gap-2 text-emerald-600 ${t.bg} hover:opacity-80 active:scale-95`}>
+      <button onClick={onExport} className={`w-full py-5 rounded-full font-bold text-base border ${t.border} mt-2 shadow-sm flex items-center justify-center gap-2 text-[#0F9D58] ${t.bg} hover:opacity-80 active:scale-95`}>
         <DownloadCloud className="w-5 h-5"/> 匯出 CSV (可匯入 Google Sheets)
       </button>
     </div>
@@ -1404,6 +1406,7 @@ const BarcodeForm = ({ codes, onSave, onSync, t }) => {
         </div>
       )}
 
+      {/* 🌟 翠綠色發票同步按鈕 */}
       <button onClick={onSync} className="w-full py-4 rounded-full font-bold text-sm text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center gap-2 shadow-sm active:scale-95">
         <RefreshCw className="w-5 h-5"/> 手動同步最新發票
       </button>
