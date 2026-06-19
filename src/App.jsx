@@ -3,7 +3,7 @@ import {
   Plus, X, Trash2, Sparkles, ChevronLeft, ChevronRight, Target, Coins, 
   PieChart as PieChartIcon, ArrowRightLeft, Home, Search, Settings, CheckCircle2, AlertTriangle,
   Barcode, Camera, ClipboardList, StickyNote, Edit3, CalendarHeart, Mic, MicOff,
-  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane, ArrowRight, Tag, ReceiptText, Keyboard, Calendar
+  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane, ArrowRight, Tag, ReceiptText, Keyboard, Calendar, TrendingUp, TrendingDown
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -120,7 +120,7 @@ export default function App() {
   });
   
   const [ui, setUi] = useState({ 
-    date: new Date(), tab: 'home', subTab: 'bills', statsView: 'month', modal: null, search: '', filterTags: [], 
+    date: new Date(), tab: 'home', subTab: 'bills', statsView: 'month', statsType: 'expense', modal: null, search: '', filterTags: [], filterAccount: 'all', // 🌟 新增圖表類型與帳戶篩選狀態
     isDark: true, confirm: null, selectedItem: null, toast: null, selectedTx: null 
   });
   
@@ -269,22 +269,34 @@ export default function App() {
   const mTx = useMemo(() => data.tx.filter(t => t.month === cMonth), [data.tx, cMonth]);
   const yTx = useMemo(() => data.tx.filter(t => t.date.startsWith(cYear)), [data.tx, cYear]);
   
-  const displayTx = useMemo(() => mTx.filter(t => {
+  // 🌟 核心過濾邏輯：依照帳戶過濾 (Home & Stats)
+  const filteredMTx = useMemo(() => {
+    if (!ui.filterAccount || ui.filterAccount === 'all') return mTx;
+    return mTx.filter(t => t.accountId === ui.filterAccount);
+  }, [mTx, ui.filterAccount]);
+
+  const filteredYTx = useMemo(() => {
+    if (!ui.filterAccount || ui.filterAccount === 'all') return yTx;
+    return yTx.filter(t => t.accountId === ui.filterAccount);
+  }, [yTx, ui.filterAccount]);
+
+  const displayTx = useMemo(() => filteredMTx.filter(t => {
     const q = !ui.search || t.category?.includes(ui.search) || t.note?.includes(ui.search);
     const tg = ui.filterTags.length === 0 || ui.filterTags.every(tag => t.tags && t.tags.includes(tag));
     return q && tg;
-  }), [mTx, ui.search, ui.filterTags]);
+  }), [filteredMTx, ui.search, ui.filterTags]);
 
   const calcStats = (txs) => txs.reduce((s, t) => {
     if (t.type === 'transfer') return s;
     if (t.type === 'expense') {
       s.exp += t.amount; 
-      s.cat[t.category] = (s.cat[t.category] || 0) + t.amount;
+      s.expCat[t.category] = (s.expCat[t.category] || 0) + t.amount;
     } else if (t.type === 'income') { 
       s.inc += t.amount; 
+      s.incCat[t.category] = (s.incCat[t.category] || 0) + t.amount;
     }
     return s;
-  }, { exp: 0, inc: 0, cat: {} });
+  }, { exp: 0, inc: 0, expCat: {}, incCat: {} });
 
   const hStats = calcStats(mTx);
   const tStats = calcStats(ui.statsView === 'month' ? mTx : yTx);
@@ -311,23 +323,18 @@ export default function App() {
   }, {});
   const totalAssets = Object.values(accBal).reduce((s, b) => s + b, 0);
 
-  // 🌟 終極精準結算邏輯 (代墊抵銷法) 包含個人不平分防護
+  // 🌟 結算邏輯永遠使用全域資料 (不隨帳戶篩選變動，確保結算精準)
   const settlement = useMemo(() => {
-    const activeTxs = ui.statsView === 'month' ? mTx : yTx;
+    const activeTxs = ui.statsView === 'month' ? mTx : yTx; // 這裡刻意使用未過濾的 mTx/yTx
     let hOwesW = 0; // 老公欠老婆
     let wOwesH = 0; // 老婆欠老公
 
     activeTxs.forEach(t => {
-      // 只有「支出」才需要結算
       if (t.type !== 'expense') return;
-      // 如果這筆標記為「不平分 (none)」，代表是個人開銷，不計入代墊結算
-      if (t.split === 'none') return;
+      if (t.split === 'none') return; // 個人開銷不平分
       
-      // 如果是老公付的，代表他幫老婆墊了一半的錢
       if (t.payer === 'husband') wOwesH += (t.amount / 2);
-      // 如果是老婆付的，代表她幫老公墊了一半的錢
       else if (t.payer === 'wife') hOwesW += (t.amount / 2);
-      // 共同帳戶 (joint) 互不相欠
     });
 
     const netWifeOwesHusband = wOwesH - hOwesW;
@@ -373,12 +380,21 @@ export default function App() {
 
   const activeAlerts = rawAlerts.filter(a => !dismissedAlerts.includes(a.id));
 
-  const pieChartData = useMemo(() => {
+  const expenseChartData = useMemo(() => {
     const total = tStats.exp || 1;
-    return Object.entries(tStats.cat).map(([name, value]) => {
+    return Object.entries(tStats.expCat).map(([name, value]) => {
       const catObj = CATEGORIES.expense.find(c => c.name === name);
       const icon = catObj?.icon || '✨';
       return { name, value, percentage: Math.round((value / total) * 100), color: '#b45309', icon };
+    }).sort((a, b) => b.value - a.value);
+  }, [tStats]);
+
+  const incomeChartData = useMemo(() => {
+    const total = tStats.inc || 1;
+    return Object.entries(tStats.incCat).map(([name, value]) => {
+      const catObj = CATEGORIES.income.find(c => c.name === name);
+      const icon = catObj?.icon || '✨';
+      return { name, value, percentage: Math.round((value / total) * 100), color: '#10B981', icon };
     }).sort((a, b) => b.value - a.value);
   }, [tStats]);
 
@@ -425,8 +441,8 @@ export default function App() {
     setAiAnalysis('');
     
     try {
-      const topCats = pieChartData.slice(0, 3).map(c => `${c.name}(${c.percentage}%)`).join('、');
-      let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老婆需給老公${Math.round(settlement.amt)}` : `老公需給老公${Math.round(settlement.amt)}`);
+      const topCats = expenseChartData.slice(0, 3).map(c => `${c.name}(${c.percentage}%)`).join('、');
+      let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老婆需給老公${Math.round(settlement.amt)}` : `老公需給老婆${Math.round(settlement.amt)}`);
       const prompt = `這是家庭帳本本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
       
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
@@ -605,20 +621,44 @@ export default function App() {
             
             {/* ================= 首頁 Tab ================= */}
             {ui.tab === 'home' && (
-              <div className="space-y-8 animate-in fade-in">
-                <section className={`${t.cardInner} rounded-[2.5rem] p-8 shadow-sm border ${t.border}`}>
+              <div className="space-y-6 animate-in fade-in">
+                
+                {/* 🌟 帳戶篩選器 */}
+                <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1 shadow-sm`}>
+                   <button onClick={() => updateUi({ filterAccount: 'all' })} className={`shrink-0 px-5 py-2.5 font-bold text-sm rounded-xl transition-all ${(!ui.filterAccount || ui.filterAccount === 'all') ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>全部帳戶</button>
+                   {data.accounts.map(a => (
+                      <button key={a.id} onClick={() => updateUi({ filterAccount: a.id })} className={`shrink-0 px-5 py-2.5 font-bold text-sm rounded-xl transition-all ${ui.filterAccount === a.id ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>{a.name}</button>
+                   ))}
+                </div>
+
+                <section className={`${t.cardInner} rounded-[2.5rem] p-7 shadow-sm border ${t.border}`}>
                   <div className="flex justify-between items-center mb-6">
                      <button onClick={() => updateUi({ modal: 'date' })} className={`flex items-center gap-2 font-bold text-lg ${t.text} ${t.bg} px-4 py-2 rounded-xl border ${t.border} active:scale-95`}>
                        {ui.date.getFullYear()}年{ui.date.getMonth() + 1}月 <ChevronDown className="w-5 h-5" />
                      </button>
-                     <span className={`font-bold text-lg ${t.textM}`}>總支出</span>
-                  </div>
-                  <div className="flex items-baseline gap-2 mb-6">
-                    <span className={`text-5xl font-bold ${t.primaryText}`}>$</span>
-                    <h2 className="text-[5rem] leading-none font-black tracking-tighter">{hStats.exp.toLocaleString()}</h2>
                   </div>
                   
-                  {rollover.enabled && !settings.travelMode && (
+                  {/* 🌟 總收入與總支出 */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className={`p-5 rounded-[2rem] border ${t.border} ${t.bg} shadow-sm`}>
+                          <p className={`text-xs font-bold ${t.textM} mb-1 flex items-center gap-1`}><TrendingUp className="w-4 h-4 text-emerald-500"/>總收入</p>
+                          <h2 className="text-3xl font-black text-emerald-500">${hStats.inc.toLocaleString()}</h2>
+                      </div>
+                      <div className={`p-5 rounded-[2rem] border ${t.border} ${t.bg} shadow-sm`}>
+                          <p className={`text-xs font-bold ${t.textM} mb-1 flex items-center gap-1`}><TrendingDown className="w-4 h-4 text-rose-500"/>總支出</p>
+                          <h2 className="text-3xl font-black text-rose-500">${hStats.exp.toLocaleString()}</h2>
+                      </div>
+                  </div>
+
+                  <div className="flex items-baseline gap-3 mb-2 px-2">
+                    <span className={`text-sm font-bold ${t.textM}`}>結餘</span>
+                    <h2 className={`text-[3.5rem] leading-none font-black tracking-tighter ${hStats.inc - hStats.exp >= 0 ? t.text : 'text-rose-500'}`}>
+                      ${(hStats.inc - hStats.exp).toLocaleString()}
+                    </h2>
+                  </div>
+                  
+                  {/* 預算結轉 (如果選擇特定帳戶，則隱藏預算區塊避免混淆) */}
+                  {rollover.enabled && !settings.travelMode && (!ui.filterAccount || ui.filterAccount === 'all') && (
                     <div className={`mt-6 pt-5 border-t ${t.border}`}>
                        <div className="flex items-center gap-2 mb-3">
                          <Sparkles className={`w-5 h-5 text-rose-500`} />
@@ -752,20 +792,40 @@ export default function App() {
             {/* ================= 統計 Tab ================= */}
             {ui.tab === 'stats' && (
               <div className="space-y-6 animate-in fade-in">
+                
+                 {/* 🌟 帳戶篩選器 */}
+                 <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1 shadow-sm`}>
+                    <button onClick={() => updateUi({ filterAccount: 'all' })} className={`shrink-0 px-4 py-2 font-bold text-sm rounded-xl transition-all ${(!ui.filterAccount || ui.filterAccount === 'all') ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>全部帳戶</button>
+                    {data.accounts.map(a => (
+                       <button key={a.id} onClick={() => updateUi({ filterAccount: a.id })} className={`shrink-0 px-4 py-2 font-bold text-sm rounded-xl transition-all ${ui.filterAccount === a.id ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>{a.name}</button>
+                    ))}
+                 </div>
+
                  <div className={`flex ${t.cardInner} p-1.5 rounded-xl border ${t.border} shadow-sm`}>
                    <button onClick={() => updateUi({ statsView: 'month' })} className={`flex-1 py-3 rounded-lg text-sm font-bold ${ui.statsView === 'month' ? `${t.bg} ${t.text} shadow-sm` : t.textM}`}>當月分析</button>
                    <button onClick={() => updateUi({ statsView: 'year' })} className={`flex-1 py-3 rounded-lg text-sm font-bold ${ui.statsView === 'year' ? `${t.bg} ${t.text} shadow-sm` : t.textM}`}>年度總結</button>
                  </div>
                  
-                 <div className="flex justify-between items-center px-2 pt-2">
+                 <div className="flex justify-between items-center px-2 pt-2 mb-2">
                    <button onClick={() => updateUi({ modal: 'date' })} className={`flex items-center gap-1.5 font-bold text-lg ${t.cardInner} px-5 py-2.5 rounded-xl shadow-sm border ${t.border} active:scale-95`}>
                      {ui.date.getFullYear()}年{ui.date.getMonth() + 1}月 <ChevronDown className="w-5 h-5 ml-1" />
                    </button>
-                   <span className="text-4xl font-black">${tStats.exp.toLocaleString()}</span>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                     <div className={`p-4 rounded-[1.5rem] border ${t.border} ${t.bg} text-center shadow-sm`}>
+                         <p className={`text-xs font-bold ${t.textM} mb-1 flex items-center justify-center gap-1`}><TrendingUp className="w-4 h-4 text-emerald-500"/>總收入</p>
+                         <p className="text-2xl font-black text-emerald-500">${tStats.inc.toLocaleString()}</p>
+                     </div>
+                     <div className={`p-4 rounded-[1.5rem] border ${t.border} ${t.bg} text-center shadow-sm`}>
+                         <p className={`text-xs font-bold ${t.textM} mb-1 flex items-center justify-center gap-1`}><TrendingDown className="w-4 h-4 text-rose-500"/>總支出</p>
+                         <p className="text-2xl font-black text-rose-500">${tStats.exp.toLocaleString()}</p>
+                     </div>
                  </div>
 
                  <div className={`${t.cardInner} rounded-[2rem] p-7 border ${t.border} shadow-sm`}>
                   <h3 className="font-extrabold text-lg mb-6 flex items-center gap-2"><ArrowRightLeft className="w-6 h-6"/> {ui.statsView === 'month' ? '本月' : '年度'}代墊結算</h3>
+                  <p className={`text-[10px] ${t.textM} mb-4 -mt-4`}>結算以「全部帳戶」之整體資料計算，不受上方帳戶篩選影響</p>
                   {settlement.status === 'settled' ? (
                     <div className={`p-5 text-center font-bold text-emerald-500 bg-emerald-500/10 rounded-2xl text-base flex items-center justify-center gap-2`}>🎉 帳目完全算清！</div>
                   ) : (
@@ -796,24 +856,72 @@ export default function App() {
                 </div>
                 
                 <div className={`${t.cardInner} rounded-[2rem] p-8 border ${t.border} shadow-sm flex flex-col items-center`}>
-                  <div className="relative w-56 h-56 flex items-center justify-center mb-8">
-                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                      <circle cx="50" cy="50" r="40" fill="transparent" stroke={ui.isDark ? "#334155" : "#EAE4DD"} strokeWidth="12" />
-                      <circle cx="50" cy="50" r="40" fill="transparent" stroke={ui.isDark ? "#4F46E5" : "#C86D23"} strokeWidth="12" className="donut-ring" strokeDashoffset={tStats.exp > 0 ? 0 : 251.2} />
-                    </svg>
-                    <div className="absolute flex flex-col items-center justify-center text-center">
-                      <span className={`text-xs font-bold ${t.textM}`}>總支出</span>
-                      <span className="text-3xl font-black mt-1">${tStats.exp.toLocaleString()}</span>
-                    </div>
+                  
+                  {/* 🌟 收入/支出 圓餅圖切換按鈕 */}
+                  <div className={`flex w-full ${t.bg} p-1.5 rounded-2xl border ${t.border} mb-8 shadow-sm`}>
+                    <button onClick={() => updateUi({ statsType: 'expense' })} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${(!ui.statsType || ui.statsType === 'expense') ? `${t.cardInner} shadow-sm text-rose-500` : t.textM}`}>支出分析</button>
+                    <button onClick={() => updateUi({ statsType: 'income' })} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${ui.statsType === 'income' ? `${t.cardInner} shadow-sm text-emerald-500` : t.textM}`}>收入分析</button>
                   </div>
-                  <div className="w-full space-y-3">
-                    {pieChartData.length === 0 ? <div className={`text-center text-sm font-bold ${t.textM}`}>無支出資料</div> : pieChartData.map((item, idx) => (
-                      <div key={idx} className={`flex justify-between items-center p-4 rounded-xl ${t.bg}`}>
-                        <div className="flex gap-3 font-bold text-base items-center">{item.icon} {item.name}</div>
-                        <div className="font-black text-base">{item.percentage}%</div>
-                      </div>
-                    ))}
-                  </div>
+
+                  {(() => {
+                    const isExp = (!ui.statsType || ui.statsType === 'expense');
+                    const currentTotal = isExp ? tStats.exp : tStats.inc;
+                    const currentData = isExp ? expenseChartData : incomeChartData;
+                    
+                    // 🌟 同心圓環比例計算 (取兩者最大值作為 100%)
+                    const maxVal = Math.max(tStats.exp, tStats.inc) || 1;
+                    const expRatio = tStats.exp / maxVal;
+                    const incRatio = tStats.inc / maxVal;
+                    
+                    const expColor = ui.isDark ? "#4F46E5" : "#C86D23";
+                    const incColor = "#10B981";
+
+                    return (
+                      <>
+                        <div className="relative w-56 h-56 flex items-center justify-center mb-8">
+                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                            {/* 外圈底色 (收入) */}
+                            <circle cx="50" cy="50" r="40" fill="transparent" stroke={ui.isDark ? "#334155" : "#EAE4DD"} strokeWidth="8" className="opacity-40" />
+                            {/* 內圈底色 (支出) */}
+                            <circle cx="50" cy="50" r="28" fill="transparent" stroke={ui.isDark ? "#334155" : "#EAE4DD"} strokeWidth="8" className="opacity-40" />
+
+                            {/* 外圈進度 (收入) */}
+                            <circle cx="50" cy="50" r="40" fill="transparent" stroke={incColor} strokeWidth="8"
+                              strokeDasharray="251.327"
+                              strokeDashoffset={251.327 - (251.327 * incRatio)}
+                              strokeLinecap="round"
+                              className={`transition-all duration-1000 ease-out ${isExp ? 'opacity-30' : 'opacity-100'}`} />
+
+                            {/* 內圈進度 (支出) */}
+                            <circle cx="50" cy="50" r="28" fill="transparent" stroke={expColor} strokeWidth="8"
+                              strokeDasharray="175.929"
+                              strokeDashoffset={175.929 - (175.929 * expRatio)}
+                              strokeLinecap="round"
+                              className={`transition-all duration-1000 ease-out ${!isExp ? 'opacity-30' : 'opacity-100'}`} />
+                          </svg>
+                          
+                          {/* 圖表正中央的文字資訊 */}
+                          <div className="absolute flex flex-col items-center justify-center text-center">
+                            <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full mb-1 transition-colors ${isExp ? (ui.isDark ? 'bg-indigo-500/20 text-indigo-400' : 'bg-[#C86D23]/10 text-[#C86D23]') : 'bg-emerald-500/10 text-emerald-600'}`}>
+                              {isExp ? '內圈：總支出' : '外圈：總收入'}
+                            </span>
+                            <span className={`text-3xl font-black ${isExp ? t.text : 'text-emerald-500'}`}>
+                              ${currentTotal.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="w-full space-y-3">
+                          {currentData.length === 0 ? <div className={`text-center text-sm font-bold ${t.textM}`}>無{isExp ? '支出' : '收入'}資料</div> : currentData.map((item, idx) => (
+                            <div key={idx} className={`flex justify-between items-center p-4 rounded-xl ${t.bg}`}>
+                              <div className="flex gap-3 font-bold text-base items-center">{item.icon} {item.name}</div>
+                              <div className="font-black text-base">{item.percentage}%</div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
 
                 <div className={`${t.cardInner} rounded-[2rem] p-6 border ${t.border}`}>
@@ -1425,15 +1533,16 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         )}
         
         {/* 🌟 日期與時間選擇器 (可打字 DD/MM/YYYY + 月曆) */}
-        <div className="flex gap-3">
-          <div className="flex-1 space-y-2">
+        <div className="flex gap-3 relative">
+          <div className="flex-1 space-y-2 relative">
             <label className={`font-bold text-xs ${t.textM} px-1`}>日期 (DD/MM/YYYY)</label>
             <div className="relative">
               <input type="text" value={displayDate} onChange={handleDateType} placeholder="DD/MM/YYYY" maxLength={10} className={`w-full p-4 pr-12 rounded-xl ${t.bg} border-none font-bold text-sm outline-none focus:ring-2 ${t.ring}`} />
-              <div className="absolute right-0 top-0 bottom-0 w-12 flex items-center justify-center overflow-hidden">
+              <div className="absolute right-0 top-0 bottom-0 w-12 flex items-center justify-center overflow-hidden pointer-events-none">
                 <Calendar className={`w-5 h-5 ${t.textMuted}`} />
-                <input type="date" value={data.recordDate} onChange={handleDateSelect} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
               </div>
+              {/* 將 input type="date" 蓋在 icon 上面並設為透明 */}
+              <input type="date" value={data.recordDate} onChange={handleDateSelect} className="absolute right-0 top-0 w-12 h-full opacity-0 cursor-pointer" />
             </div>
           </div>
           <div className="flex-1 space-y-2">
@@ -2007,7 +2116,8 @@ const EventForm = ({ onSave, t }) => {
           <input type="text" value={displayDate} onChange={handleDateType} placeholder="DD/MM/YYYY" maxLength={10} className={`w-full p-4 pr-12 rounded-xl ${t.bg} border-none font-bold text-base outline-none focus:ring-2 ${t.ring}`} />
           <div className="absolute right-0 top-0 bottom-0 w-12 flex items-center justify-center overflow-hidden">
             <Calendar className={`w-5 h-5 ${t.textMuted}`} />
-            <input type="date" value={dateStr} onChange={handleDateSelect} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+            {/* 讓 input type="date" 蓋在整個圖示區域上，並且設為透明 */}
+            <input type="date" value={dateStr} onChange={handleDateSelect} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
           </div>
         </div>
       </div>
