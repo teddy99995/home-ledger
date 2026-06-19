@@ -3,7 +3,7 @@ import {
   Plus, X, Trash2, Sparkles, ChevronLeft, ChevronRight, Target, Coins, 
   PieChart as PieChartIcon, ArrowRightLeft, Home, Search, Settings, CheckCircle2, AlertTriangle,
   Barcode, Camera, ClipboardList, StickyNote, Edit3, CalendarHeart, Mic, MicOff,
-  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane, ArrowRight
+  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane, ArrowRight, Tag, ReceiptText, Keyboard
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -28,30 +28,28 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-<<<<<<< HEAD
-// 🤖 您的專屬 Gemini API 金鑰 (使用最新截圖上的這把)
-const apiKey = "AQ.Ab8RN6IaSt-pPRMC1rSHky9v4JYyzJ55lbg2h4LgLgAwwUumcg"; 
-=======
-// 🤖 您的專屬 Gemini API 金鑰
-// ⚠️ 請確保這是一把 "AIzaSy" 開頭的合法金鑰，AQ 開頭的憑證會被瀏覽器擋下
-const apiKey = "AQ.Ab8RN6I_s9Pirhsp49ETH61MshhYI9d-7YEoNAaBlrRTIs6C8A"; 
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
+// 🤖 安全讀取 API Key：全自動讀取 Vercel 的 VITE_GEMINI_API_KEY
+const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || 
+               (typeof process !== 'undefined' && process.env?.REACT_APP_GEMINI_API_KEY) || 
+               ""; 
 
-// 純家庭帳本分類設定
+// 🌟 純家庭帳本分類設定 (無工作室)
 const CATEGORIES = {
   expense: [
     { name: '餐飲', icon: '🍽️' }, { name: '購物', icon: '🛍️' }, { name: '交通', icon: '🚗' }, 
     { name: '居家', icon: '🏠' }, { name: '娛樂', icon: '🍿' }, { name: '醫療', icon: '💊' }, 
     { name: '教育', icon: '📚' }, { name: '其他', icon: '✨' }
   ],
-  income: [ { name: '薪資', icon: '💰' }, { name: '投資', icon: '📈' }, { name: '獎金', icon: '🎁' }, { name: '其他', icon: '✨' } ]
+  income: [ 
+    { name: '薪資', icon: '💰' }, { name: '投資', icon: '📈' }, { name: '獎金', icon: '🎁' }, { name: '其他', icon: '✨' } 
+  ]
 };
 
 const getLocalYYYYMM = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 const getLocalYYYYMMDD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const calculateDaysDiff = (target) => Math.ceil((new Date(target).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
 
-// 🔥 智慧資料庫路徑設計
+// 🔥 智慧資料庫路徑設計 (純家庭，無 Workspace)
 const isCanvas = typeof __app_id !== 'undefined';
 const safeAppId = isCanvas ? String(__app_id) : ''; 
 
@@ -69,11 +67,7 @@ const getDocRef = (colName, docId) => {
 };
 
 // ==========================================
-<<<<<<< HEAD
 // 🛡️ API 防護網 (包含錯誤攔截)
-=======
-// 🛡️ API 防護網 
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
 // ==========================================
 const fetchWithBackoff = async (url, options, retries = 3) => {
   const delays = [1000, 2000, 4000];
@@ -118,11 +112,7 @@ export default function App() {
     enableRollover: true, notifyLargeExpense: true, largeExpenseThreshold: 3000, 
     notifyBillDue: true, notifyEvents: true, notifyAdvanceDays: 3,
     travelMode: false, travelCurrency: 'JPY', travelRate: 0.21,
-<<<<<<< HEAD
-    uiFontSize: 'md' // 🌟 字體大小設定
-=======
-    uiFontSize: 'md' // 🌟 新增字體大小設定
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
+    uiFontSize: 'md' 
   });
   
   const [ui, setUi] = useState({ 
@@ -166,28 +156,52 @@ export default function App() {
     return onAuthStateChanged(auth, setUser);
   }, []);
 
-  // 資料監聽
+  // 資料監聽 (純家庭帳本)
   useEffect(() => {
     if (!user) return;
     const unsubs = [
       onSnapshot(getCol('shared_accounts'), snap => {
         if (snap.empty) {
-          const defaults = [{ id: 'acc_joint', name: '共同帳戶', type: 'joint', icon: '🏦' }, { id: 'acc_h', name: '老公帳戶', type: 'husband', icon: '👨' }, { id: 'acc_w', name: '老婆帳戶', type: 'wife', icon: '👩' }];
+          const defaults = [
+            { id: 'acc_joint', name: '共同帳戶', type: 'joint', icon: '🏦' }, 
+            { id: 'acc_h', name: '老公帳戶', type: 'husband', icon: '👨' }, 
+            { id: 'acc_w', name: '老婆帳戶', type: 'wife', icon: '👩' }
+          ];
           defaults.forEach(d => setDoc(getDocRef('shared_accounts', d.id), { ...d, createdAt: serverTimestamp() }));
         } else {
           setData(prev => ({ ...prev, accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.createdAt?.toMillis() - b.createdAt?.toMillis()) }));
         }
       }),
-      onSnapshot(getDocRef('shared_settings', 'main'), doc => { if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() })); }),
-      onSnapshot(getDocRef('shared_tags', 'main'), doc => setData(prev => ({ ...prev, tags: doc.exists() ? doc.data().tags : [] }))),
-      onSnapshot(getCol('recurring_rules'), snap => setData(prev => ({ ...prev, recurringRules: snap.docs.map(d => ({ id: d.id, ...d.data() })) }))),
-      onSnapshot(getCol('shared_templates'), snap => setData(prev => ({ ...prev, templates: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))),
-      onSnapshot(getCol('shared_ledger'), snap => setData(p => ({ ...p, tx: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))),
-      onSnapshot(getCol('shared_bills'), snap => setData(p => ({ ...p, bills: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.dueDate - b.dueDate) }))),
-      onSnapshot(getCol('shared_notes'), snap => setData(p => ({ ...p, notes: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.updatedAt?.toMillis() - a.updatedAt?.toMillis()) }))),
-      onSnapshot(getCol('shared_shopping'), snap => setData(p => ({ ...p, shopping: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.completed === b.completed ? (b.createdAt?.toMillis() - a.createdAt?.toMillis()) : (a.completed ? 1 : -1)) }))),
-      onSnapshot(getCol('shared_goals'), snap => setData(p => ({ ...p, goals: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.createdAt?.toMillis() - b.createdAt?.toMillis()) }))),
-      onSnapshot(getCol('shared_events'), snap => setData(p => ({ ...p, events: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => calculateDaysDiff(a.date) - calculateDaysDiff(b.date)) })))
+      onSnapshot(getDocRef('shared_settings', 'main'), doc => { 
+        if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() })); 
+      }),
+      onSnapshot(getDocRef('shared_tags', 'main'), doc => {
+        setData(prev => ({ ...prev, tags: doc.exists() ? doc.data().tags : [] }))
+      }),
+      onSnapshot(getCol('recurring_rules'), snap => {
+        setData(prev => ({ ...prev, recurringRules: snap.docs.map(d => ({ id: d.id, ...d.data() })) }))
+      }),
+      onSnapshot(getCol('shared_templates'), snap => {
+        setData(prev => ({ ...prev, templates: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))
+      }),
+      onSnapshot(getCol('shared_ledger'), snap => {
+        setData(p => ({ ...p, tx: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))
+      }),
+      onSnapshot(getCol('shared_bills'), snap => {
+        setData(p => ({ ...p, bills: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.dueDate - b.dueDate) }))
+      }),
+      onSnapshot(getCol('shared_notes'), snap => {
+        setData(p => ({ ...p, notes: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.updatedAt?.toMillis() - a.updatedAt?.toMillis()) }))
+      }),
+      onSnapshot(getCol('shared_shopping'), snap => {
+        setData(p => ({ ...p, shopping: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.completed === b.completed ? (b.createdAt?.toMillis() - a.createdAt?.toMillis()) : (a.completed ? 1 : -1)) }))
+      }),
+      onSnapshot(getCol('shared_goals'), snap => {
+        setData(p => ({ ...p, goals: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.createdAt?.toMillis() - b.createdAt?.toMillis()) }))
+      }),
+      onSnapshot(getCol('shared_events'), snap => {
+        setData(p => ({ ...p, events: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => calculateDaysDiff(a.date) - calculateDaysDiff(b.date)) }))
+      })
     ];
     return () => unsubs.forEach(u => u());
   }, [user]);
@@ -196,17 +210,34 @@ export default function App() {
   useEffect(() => {
     if (!user || data.recurringRules.length === 0 || processedRecurring.current) return;
     const processRules = async () => {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const today = new Date(); 
+      today.setHours(0, 0, 0, 0);
       let processedCount = 0;
+
       for (const rule of data.recurringRules) {
         if (!rule.nextDueDate) continue;
-        const dueDate = rule.nextDueDate.toDate(); dueDate.setHours(0, 0, 0, 0);
+        const dueDate = rule.nextDueDate.toDate(); 
+        dueDate.setHours(0, 0, 0, 0);
+
         if (dueDate <= today) {
-          const newTx = { ...rule.txData, date: getLocalYYYYMMDD(dueDate), month: getLocalYYYYMM(dueDate), createdAt: serverTimestamp(), createdBy: user.uid, tags: [...(rule.txData.tags || []), '週期性'] };
+          const newTx = { 
+            ...rule.txData, 
+            date: getLocalYYYYMMDD(dueDate), 
+            month: getLocalYYYYMM(dueDate), 
+            createdAt: serverTimestamp(), 
+            createdBy: user.uid, 
+            tags: [...(rule.txData.tags || []), '週期性'] 
+          };
+          
           await addDoc(getCol('shared_ledger'), newTx);
+          
           const next = new Date(dueDate);
-          if (rule.frequency === 'monthly') next.setMonth(next.getMonth() + rule.interval);
-          else if (rule.frequency === 'weekly') next.setDate(next.getDate() + rule.interval * 7);
+          if (rule.frequency === 'monthly') {
+            next.setMonth(next.getMonth() + rule.interval);
+          } else if (rule.frequency === 'weekly') {
+            next.setDate(next.getDate() + rule.interval * 7);
+          }
+          
           await updateDoc(getDocRef('recurring_rules', rule.id), { nextDueDate: next });
           processedCount++;
         }
@@ -231,10 +262,18 @@ export default function App() {
   const calcStats = (txs) => txs.reduce((s, t) => {
     if (t.type === 'transfer') return s;
     if (t.type === 'expense') {
-      s.exp += t.amount; s.cat[t.category] = (s.cat[t.category] || 0) + t.amount;
-    } else if (t.type === 'income') { s.inc += t.amount; }
+      s.exp += t.amount; 
+      s.cat[t.category] = (s.cat[t.category] || 0) + t.amount;
+      if (t.payer === 'husband') s.hp += t.amount; 
+      if (t.payer === 'wife') s.wp += t.amount;
+      if (t.split === 'husband') s.ho += t.amount; 
+      else if (t.split === 'wife') s.wo += t.amount; 
+      else { s.ho += t.amount / 2; s.wo += t.amount / 2; }
+    } else if (t.type === 'income') { 
+      s.inc += t.amount; 
+    }
     return s;
-  }, { exp: 0, inc: 0, cat: {} });
+  }, { exp: 0, inc: 0, cat: {}, ho: 0, wo: 0, hp: 0, wp: 0 });
 
   const hStats = calcStats(mTx);
   const tStats = calcStats(ui.statsView === 'month' ? mTx : yTx);
@@ -285,27 +324,45 @@ export default function App() {
 
   // 🔔 系統通知
   const rawAlerts = useMemo(() => {
-    const a = []; const today = new Date().getDate(); const notifyDays = settings.notifyAdvanceDays || 3;
-<<<<<<< HEAD
-    if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期`, time: '系統' }); });
-    if (settings.notifyEvents) data.events.forEach(e => { const d = calculateDaysDiff(e.date); if (d >= 0 && d <= notifyDays) a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天`, time: '系統' }); });
-    if (settings.notifyLargeExpense) data.tx.slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}`, time: t.date }); });
-=======
-    if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期` }); });
-    if (settings.notifyEvents) data.events.forEach(e => { const d = calculateDaysDiff(e.date); if (d >= 0 && d <= notifyDays) a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天` }); });
-    if (settings.notifyLargeExpense) mTx.slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}` }); });
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
-    return a;
-  }, [data, settings]);
+    const a = []; 
+    const today = new Date().getDate(); 
+    const notifyDays = settings.notifyAdvanceDays || 3;
+    
+    if (settings.notifyBillDue) {
+      data.bills.forEach(b => { 
+        if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) {
+          a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期` }); 
+        }
+      });
+    }
+    
+    if (settings.notifyEvents) {
+      data.events.forEach(e => { 
+        const d = calculateDaysDiff(e.date); 
+        if (d >= 0 && d <= notifyDays) {
+          a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天` }); 
+        }
+      });
+    }
 
-  const activeAlerts = rawAlerts.filter(a => !dismissedAlerts.includes(a.id));
+    if (settings.notifyLargeExpense) {
+      mTx.slice(0, 15).forEach(t => { 
+        if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) {
+          a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}` }); 
+        }
+      });
+    }
+
+    return a;
+  }, [data, settings, mTx]);
 
   const activeAlerts = rawAlerts.filter(a => !dismissedAlerts.includes(a.id));
 
   const pieChartData = useMemo(() => {
     const total = tStats.exp || 1;
     return Object.entries(tStats.cat).map(([name, value]) => {
-      const icon = CATEGORIES.expense.find(c => c.name === name)?.icon || '✨';
+      const catObj = CATEGORIES.expense.find(c => c.name === name);
+      const icon = catObj?.icon || '✨';
       return { name, value, percentage: Math.round((value / total) * 100), color: '#b45309', icon };
     }).sort((a, b) => b.value - a.value);
   }, [tStats]);
@@ -337,32 +394,27 @@ export default function App() {
 
   const handleAddGlobalTag = async (tagName) => {
     if (!tagName.trim() || data.tags.includes(tagName)) return;
-    try { await setDoc(getDocRef('shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {}
+    try { 
+      await setDoc(getDocRef('shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); 
+      showToast(`標籤 #${tagName} 已建立`); 
+    } catch (err) {}
   };
 
-<<<<<<< HEAD
-  // 🤖 AI 顧問呼叫 (💯 完美套用您的 cURL 邏輯，使用 X-goog-api-key)
+  // 🤖 AI 顧問呼叫 (完美使用 cURL Header 寫法，拒絕 401 錯誤)
   const handleCallAI = async () => {
     if (!apiKey) {
-      showToast("系統未設定 API 金鑰", "error");
-=======
-  // 🤖 AI 顧問呼叫
-  const handleCallAI = async () => {
-    if (!apiKey || apiKey.includes("請在此貼上")) {
-      showToast("系統未設定 API 金鑰，請於程式碼補上", "error");
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
+      showToast("系統未設定 API 金鑰！請在 Vercel 設定 VITE_GEMINI_API_KEY", "error");
       return;
     }
-    setIsAiLoading(true); setAiAnalysis('');
+    setIsAiLoading(true); 
+    setAiAnalysis('');
+    
     try {
       const topCats = pieChartData.slice(0, 3).map(c => `${c.name}(${c.percentage}%)`).join('、');
-<<<<<<< HEAD
-      let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老公需給老婆${Math.round(settlement.amt)}` : `老婆需給老公${Math.round(settlement.amt)}`);
+      let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老婆需給老公${Math.round(settlement.amt)}` : `老公需給老婆${Math.round(settlement.amt)}`);
       const prompt = `這是家庭帳本本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
       
-      // 🌟 【最終破案解法】完全套用您 cURL 成功的做法！
-      // 1. 使用 gemini-flash-latest 端點
-      // 2. 使用 X-goog-api-key 傳遞憑證
+      // 🌟 嚴格套用您提供的 cURL 端點與 Header
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
       const options = {
         method: 'POST',
@@ -370,25 +422,13 @@ export default function App() {
           'Content-Type': 'application/json',
           'X-goog-api-key': apiKey 
         },
-=======
-      let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老婆需給老公${Math.round(settlement.amt)}` : `老公需給老婆${Math.round(settlement.amt)}`);
-      const prompt = `這是家庭帳本本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
-      
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-      const options = {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       };
 
       const resData = await fetchWithBackoff(url, options);
       
-<<<<<<< HEAD
-      if (!resData || !resData.candidates) throw new Error("API 回傳格式錯誤或遭拒絕");
-=======
       if (!resData || !resData.candidates) throw new Error("API 回傳格式錯誤或遭拒絕，請確認金鑰權限");
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
+      
       setAiAnalysis(resData.candidates[0].content.parts[0].text);
     } catch (err) { 
       setAiAnalysis(`AI 服務連線異常：${err.message}`); 
@@ -398,12 +438,12 @@ export default function App() {
     }
   };
 
-<<<<<<< HEAD
   // 匯出 CSV 
-=======
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
   const handleExportToSheets = () => {
-    if (data.tx.length === 0) return showToast("目前沒有資料可以匯出喔！", "error"); 
+    if (data.tx.length === 0) {
+      return showToast("目前沒有資料可以匯出喔！", "error"); 
+    }
+    
     const BOM = "\uFEFF"; 
     const headers = ['日期', '類型', '分類/轉出', '帳戶/轉入', '金額', '備註', '付款人', '標籤'];
     const rows = data.tx.map(tx => {
@@ -411,15 +451,23 @@ export default function App() {
       const catOrFrom = tx.type === 'transfer' ? data.accounts.find(a => a.id === tx.fromAccountId)?.name : tx.category;
       const accOrTo = tx.type === 'transfer' ? data.accounts.find(a => a.id === tx.toAccountId)?.name : data.accounts.find(a => a.id === tx.accountId)?.name;
       const payerLabel = tx.payer === 'husband' ? '老公' : tx.payer === 'wife' ? '老婆' : '共同';
-      return [tx.date, typeLabel, catOrFrom || '', accOrTo || '', tx.amount, `"${tx.note || ''}"`, payerLabel, tx.tags ? `"${tx.tags.join(';')}"` : ''].join(",");
+      
+      return [
+        tx.date, typeLabel, catOrFrom || '', accOrTo || '', tx.amount, 
+        `"${tx.note || ''}"`, payerLabel, tx.tags ? `"${tx.tags.join(';')}"` : ''
+      ].join(",");
     });
     
     const csvContent = BOM + headers.join(",") + "\n" + rows.join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob); 
     const link = document.createElement('a'); 
-    link.href = url; link.setAttribute('download', `HomeLedger_${getLocalYYYYMMDD(new Date())}.csv`);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link); 
+    link.href = url; 
+    link.setAttribute('download', `HomeLedger_${getLocalYYYYMMDD(new Date())}.csv`);
+    document.body.appendChild(link); 
+    link.click(); 
+    document.body.removeChild(link); 
+    
     showToast("匯出成功！請直接匯入 Google Sheets");
   };
 
@@ -448,10 +496,6 @@ export default function App() {
     ring: 'focus:ring-[#C86D23]'
   };
 
-<<<<<<< HEAD
-  // ✈️ 旅遊模式覆蓋配色
-=======
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
   if (settings.travelMode) {
      t = {
        ...t,
@@ -487,7 +531,7 @@ export default function App() {
       <div className={`min-h-[100dvh] w-full flex justify-center ${t.bg} transition-colors duration-500 overflow-x-hidden font-sans`}>
         <div className={`w-full max-w-md md:max-w-xl ${t.text} relative flex flex-col min-h-[100dvh] ${t.cardInner} md:border-x md:shadow-2xl ${t.border}`}>
           
-          {/* 🔥 刪除確認 Modal (設定 z-[9999] 保證絕對在最上層，不被筆記擋住) */}
+          {/* 🔥 刪除確認 Modal (設定 z-[9999] 保證絕對在最上層) */}
           {ui.confirm && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
               <div className={`${t.cardInner} rounded-3xl p-8 w-full max-w-xs shadow-2xl text-center border ${t.border}`}>
@@ -555,8 +599,8 @@ export default function App() {
                      <span className={`font-bold text-lg ${t.textM}`}>總支出</span>
                   </div>
                   <div className="flex items-baseline gap-2 mb-6">
-                    <span className={`text-4xl font-bold ${t.primaryText}`}>$</span>
-                    <h2 className="text-6xl leading-none font-black tracking-tighter">{hStats.exp.toLocaleString()}</h2>
+                    <span className={`text-5xl font-bold ${t.primaryText}`}>$</span>
+                    <h2 className="text-[5rem] leading-none font-black tracking-tighter">{hStats.exp.toLocaleString()}</h2>
                   </div>
                   
                   {rollover.enabled && !settings.travelMode && (
@@ -597,50 +641,54 @@ export default function App() {
                   
                   {displayTx.length === 0 ? (
                     <div className={`text-center py-16 font-bold text-lg ${t.textM} ${t.cardInner} rounded-3xl border ${t.border}`}>本月還沒有記帳紀錄</div>
-                  ) : displayTx.map(tx => (
-                    <div key={tx.id} className={`p-5 rounded-3xl flex flex-col border ${t.border} ${t.cardInner} shadow-sm group`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-5 truncate">
-                          <div className={`w-16 h-16 rounded-full ${t.bg} flex items-center justify-center text-3xl shrink-0`}>
-                            {tx.type === 'transfer' ? <ArrowRightLeft className="w-6 h-6 text-stone-500" /> : CATEGORIES.expense.find(c=>c.name===tx.category)?.icon || CATEGORIES.income.find(c=>c.name===tx.category)?.icon || '📝'}
-                          </div>
-                          <div className="truncate">
-                            <p className="font-extrabold text-xl truncate mb-1">
-                              {tx.type === 'transfer' ? '轉帳' : tx.category} 
-                              <span className={`text-sm ${t.textM} ml-2 font-normal`}>
-                                {tx.type === 'transfer' ? 
-                                  `${data.accounts.find(a=>a.id===tx.fromAccountId)?.name} ➔ ${data.accounts.find(a=>a.id===tx.toAccountId)?.name}` 
-                                  : `(${data.accounts.find(a=>a.id===tx.accountId)?.name})`}
-                              </span>
-                            </p>
-                            <div className="flex gap-2 mt-1.5 flex-wrap items-center">
-                              {tx.type !== 'transfer' && (
-                                <span className={`text-xs px-2.5 py-1 rounded-lg font-bold ${t.bg} ${t.textM}`}>
-                                  付:{tx.payer==='husband'?'老公':tx.payer==='wife'?'老婆':'共同'}
+                  ) : displayTx.map(tx => {
+                    const catObj = CATEGORIES.expense.find(c=>c.name===tx.category) || CATEGORIES.income.find(c=>c.name===tx.category);
+                    const icon = catObj ? catObj.icon : '📝';
+                    return (
+                      <div key={tx.id} className={`p-5 rounded-3xl flex flex-col border ${t.border} ${t.cardInner} shadow-sm group`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-5 truncate">
+                            <div className={`w-16 h-16 rounded-full ${t.bg} flex items-center justify-center text-3xl shrink-0`}>
+                              {tx.type === 'transfer' ? <ArrowRightLeft className="w-6 h-6 text-stone-500" /> : icon}
+                            </div>
+                            <div className="truncate">
+                              <p className="font-extrabold text-xl truncate mb-1">
+                                {tx.type === 'transfer' ? '轉帳' : tx.category} 
+                                <span className={`text-sm ${t.textM} ml-2 font-normal`}>
+                                  {tx.type === 'transfer' ? 
+                                    `${data.accounts.find(a=>a.id===tx.fromAccountId)?.name} ➔ ${data.accounts.find(a=>a.id===tx.toAccountId)?.name}` 
+                                    : `(${data.accounts.find(a=>a.id===tx.accountId)?.name})`}
                                 </span>
-                              )}
-                              {tx.tags?.map(tg => <span key={tg} className={`text-xs font-bold ${t.primaryText}`}>#{tg}</span>)}
-                              <span className={`text-sm ${t.textM} font-bold truncate max-w-[180px] ml-1`}>{tx.note}</span>
+                              </p>
+                              <div className="flex gap-2 mt-1.5 flex-wrap items-center">
+                                {tx.type !== 'transfer' && (
+                                  <span className={`text-xs px-2.5 py-1 rounded-lg font-bold ${t.bg} ${t.textM}`}>
+                                    付:{tx.payer==='husband'?'老公':tx.payer==='wife'?'老婆':'共同'}
+                                  </span>
+                                )}
+                                {tx.tags?.map(tg => <span key={tg} className={`text-xs font-bold ${t.primaryText}`}>#{tg}</span>)}
+                                <span className={`text-sm ${t.textM} font-bold truncate max-w-[180px] ml-1`}>{tx.note}</span>
+                              </div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className={`font-black text-2xl ${tx.type === 'expense' ? t.text : tx.type === 'income' ? 'text-emerald-500' : t.textM}`}>
+                              {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}${tx.amount.toLocaleString()}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className={`font-black text-2xl ${tx.type === 'expense' ? t.text : tx.type === 'income' ? 'text-emerald-500' : t.textM}`}>
-                            {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}${tx.amount.toLocaleString()}
-                          </span>
+                        
+                        <div className={`flex justify-end gap-3 mt-4 pt-4 border-t ${t.border}`}>
+                          <button onClick={() => handleOpenTx(tx)} className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold ${t.bg} ${t.textM} hover:${t.primaryText} active:scale-95 transition-colors`}>
+                            <Edit3 className="w-4 h-4" /> 修改
+                          </button>
+                          <button onClick={() => confirmDel('確定要刪除這筆紀錄嗎？', () => deleteDoc(getDocRef('shared_ledger', tx.id)))} className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold ${ui.isDark ? 'bg-red-900/20' : 'bg-red-50'} text-red-500 active:scale-95 transition-colors`}>
+                            <Trash2 className="w-4 h-4" /> 刪除
+                          </button>
                         </div>
                       </div>
-                      
-                      <div className={`flex justify-end gap-3 mt-4 pt-4 border-t ${t.border}`}>
-                        <button onClick={() => handleOpenTx(tx)} className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold ${t.bg} ${t.textM} hover:${t.primaryText} active:scale-95 transition-colors`}>
-                          <Edit3 className="w-4 h-4" /> 修改
-                        </button>
-                        <button onClick={() => confirmDel('確定要刪除這筆紀錄嗎？', () => deleteDoc(getDocRef('shared_ledger', tx.id)))} className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold ${ui.isDark ? 'bg-red-900/20' : 'bg-red-50'} text-red-500 active:scale-95 transition-colors`}>
-                          <Trash2 className="w-4 h-4" /> 刪除
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -1109,15 +1157,11 @@ export default function App() {
 // 4. 獨立子組件庫 (Forms & Modals)
 // ==========================================
 
-<<<<<<< HEAD
-// 🌟 記帳表單 (視覺鎖定計算機 + 一鍵範本 + OCR 防呆)
-=======
-// 🌟 記帳表單 (視覺鎖定計算機 + 一鍵範本 + 自動判斷付款人)
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
+// 🌟 記帳表單 (視覺鎖定計算機 + 一鍵範本 + 折疊按鈕 + OCR 防呆 + 全自動付款人判斷)
 const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, t, ui }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, type: initialData?.type || 'expense', 
-    category: initialData?.category || cats?.expense?.[0]?.name || '餐飲', 
+    category: initialData?.category || cats.expense[0]?.name || '餐飲', 
     accountId: initialData?.accountId || (accounts[0]?.id || ''), fromAccountId: initialData?.fromAccountId || (accounts[0]?.id || ''),
     toAccountId: initialData?.toAccountId || (accounts[1]?.id || ''), amount: initialData ? String(initialData.amount) : '', 
     note: initialData?.note || '', tags: initialData?.tags || [] 
@@ -1154,13 +1198,10 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       data.note = `[${settings.travelCurrency} ${data.amount}] ${data.note}`;
     }
     if (finalAmount > 0) {
-<<<<<<< HEAD
-=======
-      // 🌟 自動判斷付款人 (從誰的帳戶出，就是誰付)
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
       const acc = accounts.find(a => a.id === data.accountId);
       const autoPayer = acc ? acc.type : 'joint'; 
-      onSave({...data, amount: finalAmount, payer: autoPayer}); 
+      const autoSplit = autoPayer === 'joint' ? 'joint' : 'half';
+      onSave({...data, amount: finalAmount, payer: autoPayer, split: autoSplit}); 
     }
   };
   
@@ -1176,17 +1217,14 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
     if (name) {
       const acc = accounts.find(a => a.id === data.accountId);
       const autoPayer = acc ? acc.type : 'joint';
-      onSaveTemplate({ name, txData: { ...data, amount: Number(evaluateMath(data.amount)), payer: autoPayer } });
+      const autoSplit = autoPayer === 'joint' ? 'joint' : 'half';
+      onSaveTemplate({ name, txData: { ...data, amount: Number(evaluateMath(data.amount)), payer: autoPayer, split: autoSplit } });
     }
   };
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
-<<<<<<< HEAD
-    if (!file || !apiKey) return alert("請先設定正確的 API 金鑰");
-=======
-    if (!file || !apiKey || apiKey.includes("請在此貼上")) return alert("請先設定正確的 API 金鑰");
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
+    if (!file || !apiKey) return alert("請先在 Vercel 或環境變數中設定 API 金鑰");
     
     setIsOCR(true);
     try {
@@ -1194,9 +1232,8 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       reader.readAsDataURL(file);
       reader.onload = async () => {
         const base64Data = reader.result.split(',')[1];
-<<<<<<< HEAD
         
-        // 🌟 OCR 辨識套用 Header 認證
+        // 🌟 嚴格套用 cURL 邏輯，使用 Header 傳送
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
         const options = {
           method: 'POST',
@@ -1204,11 +1241,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
             'Content-Type': 'application/json',
             'X-goog-api-key': apiKey
           },
-=======
-        const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
           body: JSON.stringify({
             contents: [{ parts: [
               { text: `請分析這張收據/發票，並回傳 JSON 格式。包含：amount (數字，總金額), note (字串，商店名稱或購買品項)。若無法辨識則留空。` },
@@ -1216,13 +1248,9 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
             ]}],
             generationConfig: { responseMimeType: "application/json" }
           })
-<<<<<<< HEAD
         };
 
         const resData = await fetchWithBackoff(url, options);
-=======
-        });
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
 
         if (resData.candidates) {
           const rawText = resData.candidates[0].content.parts[0].text;
@@ -1234,41 +1262,27 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       };
     } catch (err) {
       console.error(err);
-<<<<<<< HEAD
-      alert("照片解析失敗，請確認金鑰或重試");
-=======
-      alert("照片解析失敗，可能為金鑰權限問題");
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
+      alert(`照片解析失敗: ${err.message}`);
       setIsOCR(false);
     }
   };
 
   return (
     <div className="flex flex-col h-full">
-      {/* 🌟 上半部：可滾動的設定區 */}
       <div className="flex-1 overflow-y-auto space-y-4 px-1 pb-16 hide-scrollbar relative">
         
-        {/* 一鍵記帳範本區 (可橫向捲動) */}
+        {/* 一鍵記帳範本區 */}
         <div className="flex justify-between items-center mb-2">
            <div className="flex gap-2 overflow-x-auto hide-scrollbar py-1">
-             <button 
-                onClick={handleSaveTemplate} 
-                className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-1.5 border-2 border-dashed ${t.border} rounded-xl text-xs font-bold ${t.textM} hover:${t.primaryText} transition-colors`}
-             >
+             <button onClick={handleSaveTemplate} className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-1.5 border-2 border-dashed ${t.border} rounded-xl text-xs font-bold ${t.textM} hover:${t.primaryText} transition-colors`}>
                 <Save className="w-3.5 h-3.5" /> 存為範本
              </button>
-             {templates && templates.map(tpl => (
+             {templates.map(tpl => (
                <div key={tpl.id} className={`relative flex items-center shrink-0 ${t.bg} border ${t.border} rounded-xl pl-3 pr-8 py-1.5 shadow-sm group`}>
-                  <span 
-                    onClick={() => setData({ ...data, ...tpl.txData, amount: String(tpl.txData.amount) })} 
-                    className={`font-bold text-sm cursor-pointer ${t.text}`}
-                  >
+                  <span onClick={() => setData({ ...data, ...tpl.txData, amount: String(tpl.txData.amount) })} className={`font-bold text-sm cursor-pointer ${t.text}`}>
                     {tpl.name}
                   </span>
-                  <button 
-                    onClick={() => onDeleteTemplate(tpl.id)} 
-                    className="absolute right-2 text-stone-400 hover:text-red-500 transition-colors p-0.5"
-                  >
+                  <button onClick={() => onDeleteTemplate(tpl.id)} className="absolute right-2 text-stone-400 hover:text-red-500 transition-colors p-0.5">
                     <X className="w-3.5 h-3.5" strokeWidth={3} />
                   </button>
                </div>
@@ -1283,13 +1297,8 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         )}
         
         <div className={`flex ${t.bg} p-1.5 rounded-2xl border ${t.border}`}>
-<<<<<<< HEAD
-          <button onClick={() => setData({...data, type:'expense', category:cats?.expense?.[0]?.name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'expense' ? `${t.cardInner} shadow-sm` : t.textM}`}>支出</button>
-          <button onClick={() => setData({...data, type:'income', category:cats?.income?.[0]?.name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'income' ? `${t.cardInner} shadow-sm` : t.textM}`}>收入</button>
-=======
-          <button onClick={() => setData({...data, type:'expense', category:cats.expense[0].name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'expense' ? `${t.cardInner} shadow-sm` : t.textM}`}>支出</button>
-          <button onClick={() => setData({...data, type:'income', category:cats.income[0].name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'income' ? `${t.cardInner} shadow-sm` : t.textM}`}>收入</button>
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
+          <button onClick={() => setData({...data, type:'expense', category:cats.expense[0]?.name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'expense' ? `${t.cardInner} shadow-sm` : t.textM}`}>支出</button>
+          <button onClick={() => setData({...data, type:'income', category:cats.income[0]?.name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'income' ? `${t.cardInner} shadow-sm` : t.textM}`}>收入</button>
           <button onClick={() => setData({...data, type:'transfer', category:''})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'transfer' ? `${t.cardInner} shadow-sm` : t.textM}`}>轉帳</button>
         </div>
         
@@ -1321,7 +1330,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
 
         {data.type !== 'transfer' && (
           <div className="space-y-2">
-            <label className={`font-bold text-xs ${t.textM}`}>帳戶 (選擇誰付款)</label>
+            <label className={`font-bold text-xs ${t.textM}`}>帳戶 (選擇從哪扣款，系統自動設定付款人)</label>
             <select value={data.accountId} onChange={e => setData({...data, accountId: e.target.value})} className={`w-full p-4 rounded-xl ${t.bg} font-bold text-base border-none outline-none focus:ring-2 ${t.ring}`}>
               {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
@@ -1336,7 +1345,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
           </div>
           <div className="flex flex-wrap gap-2">
             {tags.map(tg => (
-              <button key={tg} onClick={() => setData(prev => ({...prev, tags: prev.tags.includes(tg) ? prev.tags.filter(x=>x!==tg) : [...prev.tags, tg]}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${data.tags.includes(tg) ? `${t.primary} text-white border-transparent` : `${t.bg} ${t.border}`}`}>#{tg}</button>
+              <button key={tg} onClick={() => setData(prev => ({...prev, tags: prev.tags.includes(tg) ? prev.tags.filter(x=>x!==tg) : [...prev.tags, tg]}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${data.tags.includes(tg) ? `${t.primary} text-white border-transparent shadow-sm` : `${t.bg} ${t.border}`}`}>#{tg}</button>
             ))}
           </div>
         </div>
@@ -1365,7 +1374,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       {/* 🌟 下半部：永久鎖定在底部的「大金額顯示 + 4x4 計算機」 */}
       {showK && (
         <div className={`shrink-0 border-t ${t.border} pt-5 pb-safe bg-transparent shadow-[0_-4px_10px_rgba(0,0,0,0.02)] animate-in slide-in-from-bottom-2`}>
-          {/* 金額顯示鎖定在這裡，打字不怕看不到！ */}
           <div className={`flex justify-between items-center px-4 py-3 mx-2 mb-3 rounded-2xl ${ui.isDark ? 'bg-[#1E293B] shadow-inner' : 'bg-stone-50 border border-stone-200'}`}>
             <span className={`font-bold text-sm ${t.textM}`}>
               {settings.travelMode ? `輸入 ${settings.travelCurrency}` : '輸入金額'}
@@ -1373,7 +1381,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
             <span className={`text-4xl font-black ${t.text} truncate max-w-[200px] text-right`}>{data.amount || '0'}</span>
           </div>
 
-          {/* 4x4 真四則運算計算機陣列 */}
           <div className={`grid grid-cols-4 gap-2 px-2 pb-2`}>
             {['7','8','9','÷', '4','5','6','×', '1','2','3','-', 'C','0','.','+', '⌫','00','=','OK'].map((k, i) => {
               const isOp = ['÷','×','-','+','='].includes(k);
@@ -1400,7 +1407,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         </div>
       )}
 
-      {/* 如果收起鍵盤，只顯示大確認按鈕與金額 */}
       {!showK && (
         <div className={`shrink-0 border-t ${t.border} pt-4 pb-safe px-2 bg-transparent animate-in slide-in-from-bottom-2`}>
            <button onClick={submit} className={`w-full py-4 rounded-2xl font-black text-xl text-white shadow-md active:scale-95 ${ui.isDark ? t.primary : 'bg-[#A29188]'}`}>
@@ -1413,11 +1419,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
 };
 
 // ==========================================
-<<<<<<< HEAD
-// 🌟 AI 語音記帳表單 (完美 Header 認證版)
-=======
-// 🌟 AI 語音記帳表單 
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
+// 🌟 AI 語音記帳表單 (嚴格套用 cURL Header 認證)
 // ==========================================
 const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
   const [text, setText] = useState(''); 
@@ -1447,20 +1449,14 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
   };
   
   const handleParse = async () => {
-<<<<<<< HEAD
     if (!apiKey) {
-      showToast("系統未設定 API 金鑰", "error");
-=======
-    if (!apiKey || apiKey.includes("請在此貼上")) {
-      showToast("錯誤：請前往 Google AI Studio 申請新金鑰", "error");
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
+      showToast("系統未設定 API 金鑰，請檢查 Vercel 環境變數", "error");
       return;
     }
     if (!text.trim()) return; 
     setLoading(true);
     try {
-<<<<<<< HEAD
-       // 🌟 語音辨識套用 Header 認證
+       // 🌟 語音辨識嚴格套用 cURL 邏輯，使用 Header 傳送金鑰
        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
        const options = {
           method: 'POST', 
@@ -1470,15 +1466,6 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
           },
           body: JSON.stringify({ 
             contents: [{ parts: [{ text: `請將以下語言記帳轉換為JSON。語言：「${text}」。這是家庭帳本。必填欄位：amount(數字), category(從[${cats?.expense?.map(c=>c.name).join(',')}]選), type('expense'/'income'/'transfer'), accountId(請挑選最合理的帳戶 ID: [${accounts.map(a=>`${a.name}:${a.id}`).join(',')}]), note(備註)。若無法判斷則填預設值。` }] }]
-=======
-       // 🌟 解決 401 錯誤：將 Key 綁定於 URL
-       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-       const options = {
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            contents: [{ parts: [{ text: `請將以下語言記帳轉換為JSON。語言：「${text}」。這是家庭帳本。必填欄位：amount(數字), category(從[${cats.expense.map(c=>c.name).join(',')}]選), type('expense'/'income'/'transfer'), accountId(請挑選最合理的帳戶 ID: [${accounts.map(a=>`${a.name}:${a.id}`).join(',')}]), note(備註)。若無法判斷則填預設值。` }] }]
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
           })
        };
 
@@ -1490,21 +1477,13 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
        const result = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
        
-<<<<<<< HEAD
-       // 自動推導付款人
-=======
-       // 🌟 自動推導付款人
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
        const acc = accounts.find(a => a.id === result.accountId) || accounts[0];
        const autoPayer = acc ? acc.type : 'joint';
+       const autoSplit = autoPayer === 'joint' ? 'joint' : 'half';
 
        onSave({ 
-<<<<<<< HEAD
          amount: result.amount || 0, category: result.category || cats?.expense?.[0]?.name, type: result.type || 'expense', 
-=======
-         amount: result.amount || 0, category: result.category || cats.expense[0].name, type: result.type || 'expense', 
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
-         accountId: acc.id, payer: autoPayer, split: 'half', note: result.note || '', tags: ['AI記帳']
+         accountId: acc.id, payer: autoPayer, split: autoSplit, note: result.note || '', tags: ['AI記帳']
        });
     } catch (e) { showToast(`AI 解析失敗: ${e.message}`, "error"); } finally { setLoading(false); }
   };
@@ -1526,7 +1505,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
 }
 
 // ==========================================
-// 高質感設定表單 (包含字體縮放與旅遊模式)
+// 高質感設定表單
 // ==========================================
 const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
   const [s, setS] = useState(settings);
@@ -1632,11 +1611,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
 };
 
 // ==========================================
-<<<<<<< HEAD
-// 🌟 實體條碼展示 (純淨版，無密碼欄位)
-=======
 // 🌟 實體條碼展示 
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
 // ==========================================
 const BarcodeDisplay = ({ code, t }) => {
   const safeCode = code ? encodeURIComponent(code) : '';
