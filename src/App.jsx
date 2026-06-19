@@ -3,7 +3,7 @@ import {
   Plus, X, Trash2, Sparkles, ChevronLeft, ChevronRight, Target, Coins, 
   PieChart as PieChartIcon, ArrowRightLeft, Home, Search, Settings, CheckCircle2, AlertTriangle,
   Barcode, Camera, ClipboardList, StickyNote, Edit3, CalendarHeart, Mic, MicOff,
-  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, Moon, Sun, Filter, Wand2, RefreshCw, Bell, Repeat, Loader2
+  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Plane, Zap
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -28,8 +28,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 🤖 您的專屬 Gemini API 金鑰已成功注入！(支援最新的 AQ. 開頭格式)
-const apiKey = "AQ.Ab8RN6IGQJKzJJVS174E0SIXvfeP77R9_AfKrNnl2Il0XsXdDQ"; 
+// 🤖 您的專屬 Gemini API 金鑰
+const apiKey = "AQ.Ab8RN6KkNEr087TvY8JC6nO2KuZwPd6omWbk1AHNwREYoYNmjw"; 
 
 const CATEGORIES = {
   expense: [
@@ -44,7 +44,7 @@ const getLocalYYYYMM = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 const getLocalYYYYMMDD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const calculateDaysDiff = (target) => Math.ceil((new Date(target).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
 
-// 🔥 智慧資料庫路徑設計 (完美修復 Vercel 上 indexOf 報錯問題)
+// 🔥 智慧資料庫路徑設計
 const isCanvas = typeof __app_id !== 'undefined';
 const safeAppId = isCanvas ? String(__app_id) : ''; 
 
@@ -62,7 +62,7 @@ const getDocRef = (colName, docId) => {
 };
 
 // ==========================================
-// 🛡️ API 防護網 (解決 AI 白畫面)
+// 🛡️ API 防護網 (使用您的 cURL Header 邏輯)
 // ==========================================
 const fetchWithBackoff = async (url, options, retries = 3) => {
   const delays = [1000, 2000, 4000];
@@ -103,9 +103,10 @@ export default function App() {
     monthlyBudget: 50000, 
     husbandBarcode: '', husbandCert: '',
     wifeBarcode: '', wifeCert: '',
-    enableRollover: true, autoSyncInvoices: true, 
+    enableRollover: true, 
     notifyLargeExpense: true, largeExpenseThreshold: 3000, 
-    notifyBillDue: true, notifyEvents: true, notifyAdvanceDays: 3 
+    notifyBillDue: true, notifyEvents: true, notifyAdvanceDays: 3,
+    travelMode: false, travelCurrency: 'JPY', travelRate: 0.21 // ✈️ 旅遊模式設定
   });
   
   const [ui, setUi] = useState({ 
@@ -113,13 +114,9 @@ export default function App() {
     isDark: false, confirm: null, selectedItem: null, toast: null, selectedTx: null 
   });
   
-  // 🔔 紀錄已點擊 X 關閉的通知
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
-
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState('');
-  
-  const syncAttempted = useRef(false);
   const processedRecurring = useRef(false);
 
   const updateUi = (updates) => setUi(prev => ({ ...prev, ...updates }));
@@ -128,7 +125,6 @@ export default function App() {
     setTimeout(() => updateUi({ toast: null }), 3000); 
   };
 
-  // 🚀 強制跳出 LINE 內部瀏覽器
   useEffect(() => {
     const isLineApp = navigator.userAgent.includes("Line") || navigator.userAgent.includes("LINE");
     const currentUrl = window.location.href;
@@ -138,27 +134,19 @@ export default function App() {
     }
   }, []);
 
-  // 登入驗證
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        showToast("登入失敗，請檢查網路", "error");
-      }
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+        else await signInAnonymously(auth);
+      } catch (err) { showToast("登入失敗，請檢查網路", "error"); }
     };
     initAuth();
     return onAuthStateChanged(auth, setUser);
   }, []);
 
-  // 資料監聽
   useEffect(() => {
     if (!user) return;
-    
     const unsubs = [
       onSnapshot(getCol('shared_accounts'), snap => {
         if (snap.empty) {
@@ -171,7 +159,6 @@ export default function App() {
       onSnapshot(getDocRef('shared_settings', 'main'), doc => { if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() })); }),
       onSnapshot(getDocRef('shared_tags', 'main'), doc => setData(prev => ({ ...prev, tags: doc.exists() ? doc.data().tags : [] }))),
       onSnapshot(getCol('recurring_rules'), snap => setData(prev => ({ ...prev, recurringRules: snap.docs.map(d => ({ id: d.id, ...d.data() })) }))),
-      
       onSnapshot(getCol('shared_ledger'), snap => setData(p => ({ ...p, tx: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))),
       onSnapshot(getCol('shared_bills'), snap => setData(p => ({ ...p, bills: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.dueDate - b.dueDate) }))),
       onSnapshot(getCol('shared_notes'), snap => setData(p => ({ ...p, notes: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.updatedAt?.toMillis() - a.updatedAt?.toMillis()) }))),
@@ -182,7 +169,6 @@ export default function App() {
     return () => unsubs.forEach(u => u());
   }, [user]);
 
-  // 週期性記帳引擎
   useEffect(() => {
     if (!user || data.recurringRules.length === 0 || processedRecurring.current) return;
     const processRules = async () => {
@@ -207,14 +193,6 @@ export default function App() {
     processRules();
   }, [user, data.recurringRules]);
 
-  // 同步雲端發票模擬
-  useEffect(() => {
-    if (!user || syncAttempted.current || !settings.autoSyncInvoices || (!settings.husbandBarcode && !settings.wifeBarcode)) return;
-    syncAttempted.current = true;
-    setTimeout(() => showToast("🔄 雲端發票同步完成", "info"), 2000);
-  }, [user, settings.autoSyncInvoices, settings.husbandBarcode, settings.wifeBarcode]);
-
-  // 衍生數據計算
   const cMonth = getLocalYYYYMM(ui.date);
   const cYear = String(ui.date.getFullYear());
   const mTx = useMemo(() => data.tx.filter(t => t.month === cMonth), [data.tx, cMonth]);
@@ -268,7 +246,6 @@ export default function App() {
     return { status: 'settled' };
   }, [tStats]);
 
-  // 🔔 系統通知
   const rawAlerts = useMemo(() => {
     const a = []; const today = new Date().getDate(); const notifyDays = settings.notifyAdvanceDays || 3;
     if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期` }); });
@@ -287,9 +264,6 @@ export default function App() {
     }).sort((a, b) => b.value - a.value);
   }, [tStats]);
 
-  // ==========================================
-  // 🛡️ Firebase 操作防護網 (完美防護 Vercel 崩潰)
-  // ==========================================
   const doAction = async (action, successMsg) => {
     try { 
       await action(); 
@@ -308,42 +282,33 @@ export default function App() {
     }
   };
   
-  const confirmDel = (msg, action) => updateUi({ 
-    confirm: { message: msg, onConfirm: () => doAction(action, "已成功刪除") } 
-  });
+  const confirmDel = (msg, action) => updateUi({ confirm: { message: msg, onConfirm: () => doAction(action, "已成功刪除") } });
 
   const handleAddGlobalTag = async (tagName) => {
     if (!tagName.trim() || data.tags.includes(tagName)) return;
     try { await setDoc(getDocRef('shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {}
   };
 
-  // 🤖 AI 顧問呼叫
   const handleCallAI = async () => {
-    if (!apiKey || apiKey.includes("請把AIzaSy")) {
-      showToast("系統未設定 API 金鑰，請於程式碼補上", "error");
-      return;
-    }
+    if (!apiKey) return showToast("系統未設定 API 金鑰", "error");
     setIsAiLoading(true); setAiAnalysis('');
     try {
       const topCats = pieChartData.slice(0, 3).map(c => `${c.name}(${c.percentage}%)`).join('、');
       let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老公需給老婆${Math.round(settlement.amt)}` : `老婆需給老公${Math.round(settlement.amt)}`);
       const prompt = `夫妻本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
       
-      const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, { 
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) 
-      });
-      
+      const options = {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      };
+      const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`, options);
       if (!resData || !resData.candidates) throw new Error("API 遭到拒絕");
       setAiAnalysis(resData.candidates[0].content.parts[0].text);
     } catch (err) { 
-      setAiAnalysis(`AI 服務連線異常，請檢查金鑰或稍後再試。`); 
-      console.error(err);
-    } finally { 
-      setIsAiLoading(false); 
-    }
+      setAiAnalysis(`AI 服務連線異常，請檢查網路或稍後再試。`); console.error(err);
+    } finally { setIsAiLoading(false); }
   };
 
-  // 匯出 CSV 到 Google Sheets
   const handleExportToSheets = () => {
     if (data.tx.length === 0) return showToast("目前沒有資料可以匯出喔！", "error"); 
     const BOM = "\uFEFF"; 
@@ -365,29 +330,33 @@ export default function App() {
     showToast("匯出成功！");
   };
 
-  // ==========================================
-  // 🌞 🌙 日夜雙生主題引擎 
-  // ==========================================
+  // ⚡ 一鍵記帳範本處理 (旅遊模式下不顯示，避免邏輯混淆)
+  const quickTemplates = [
+    { id: 1, name: '咖啡', amount: 55, category: '餐飲', icon: '☕' },
+    { id: 2, name: '便當', amount: 100, category: '餐飲', icon: '🍱' },
+    { id: 3, name: '手搖飲', amount: 50, category: '餐飲', icon: '🥤' },
+    { id: 4, name: '交通費', amount: 30, category: '交通', icon: '🚌' }
+  ];
+
+  const handleQuickAdd = async (tpl) => {
+    const payload = {
+       type: 'expense', category: tpl.category, accountId: data.accounts[0]?.id || '',
+       amount: tpl.amount, note: tpl.name, payer: 'joint', split: 'half', tags: ['一鍵記帳'],
+       date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date),
+       createdAt: serverTimestamp(), createdBy: user ? user.uid : 'unknown'
+    };
+    await doAction(() => addDoc(getCol('shared_ledger'), payload), `已快速記下：${tpl.name}`);
+  };
+
+  // 🌞 🌙 ✈️ 主題與旅遊模式背景引擎
   const t = ui.isDark ? { 
-    bg: 'bg-[#0F172A]', 
-    cardInner: 'bg-[#1E293B]', 
-    text: 'text-[#F8FAFC]', 
-    textM: 'text-[#94A3B8]', 
-    primary: 'bg-[#4F46E5]', 
-    primaryText: 'text-[#818CF8]', 
-    border: 'border-[#334155]', 
-    input: 'bg-[#0F172A] text-white',
-    ring: 'focus:ring-indigo-500'
+    bg: settings.travelMode ? 'bg-[#082f49]' : 'bg-[#0F172A]', // 旅遊模式深藍
+    cardInner: settings.travelMode ? 'bg-[#0c4a6e]' : 'bg-[#1E293B]', 
+    text: 'text-[#F8FAFC]', textM: 'text-[#94A3B8]', primary: 'bg-[#4F46E5]', primaryText: 'text-[#818CF8]', border: 'border-[#334155]', ring: 'focus:ring-indigo-500'
   } : {
-    bg: 'bg-[#FAF9F6]', 
+    bg: settings.travelMode ? 'bg-[#e0f2fe]' : 'bg-[#FAF9F6]', // 旅遊模式天空藍
     cardInner: 'bg-white', 
-    text: 'text-[#2A2623]', 
-    textM: 'text-[#8C857D]', 
-    primary: 'bg-[#5C4033]', 
-    primaryText: 'text-[#5C4033]', 
-    border: 'border-[#EAE4DD]', 
-    input: 'bg-[#FAF9F6] text-[#2A2623]',
-    ring: 'focus:ring-[#C86D23]'
+    text: 'text-[#2A2623]', textM: 'text-[#8C857D]', primary: 'bg-[#5C4033]', primaryText: 'text-[#5C4033]', border: 'border-[#EAE4DD]', ring: 'focus:ring-[#C86D23]'
   };
 
   return (
@@ -397,7 +366,7 @@ export default function App() {
         .pt-safe { padding-top: calc(1rem + env(safe-area-inset-top)); }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        body { background-color: ${ui.isDark ? '#0F172A' : '#FAF9F6'}; margin: 0; padding: 0; }
+        body { background-color: ${ui.isDark ? (settings.travelMode ? '#082f49' : '#0F172A') : (settings.travelMode ? '#e0f2fe' : '#FAF9F6')}; margin: 0; padding: 0; }
         .donut-ring { stroke-dasharray: 251.2; stroke-dashoffset: 0; transition: stroke-dashoffset 1s ease-in-out; }
       `}} />
 
@@ -429,7 +398,7 @@ export default function App() {
           )}
 
           {/* 🌟 頂部 Header */}
-          <header className={`px-6 pt-safe pb-4 flex justify-between items-center ${t.cardInner} z-10 shrink-0`}>
+          <header className={`px-6 pt-safe pb-4 flex justify-between items-center ${t.cardInner} z-10 shrink-0 border-b ${t.border}`}>
             <div className="flex gap-3 w-24">
                <button onClick={() => updateUi({ isDark: !ui.isDark })} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform`}>
                  {ui.isDark ? <Sun className="w-5 h-5"/> : <Moon className="w-5 h-5"/>}
@@ -439,7 +408,11 @@ export default function App() {
                </button>
             </div>
             <div className="flex-1 text-center">
-              <h1 className="text-2xl font-black tracking-wide flex items-center justify-center gap-1.5">Home Ledger <span className="text-rose-500">♡</span></h1>
+              <h1 className="text-2xl font-black tracking-wide flex items-center justify-center gap-1.5">
+                {settings.travelMode ? <Plane className="w-5 h-5 text-sky-500" /> : null}
+                Home Ledger 
+                {settings.travelMode ? <span className="text-sky-500 text-sm ml-1">({settings.travelCurrency})</span> : <span className="text-rose-500">♡</span>}
+              </h1>
             </div>
             <div className="flex gap-3 w-24 justify-end relative">
               <button onClick={() => updateUi({ modal: 'barcode' })} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform`}>
@@ -453,7 +426,7 @@ export default function App() {
           </header>
 
           {/* 主畫面 */}
-          <main className={`px-6 space-y-8 flex-1 overflow-y-auto pb-40 pt-2 hide-scrollbar ${t.bg}`}>
+          <main className={`px-6 space-y-8 flex-1 overflow-y-auto pb-40 pt-6 hide-scrollbar ${t.bg}`}>
             
             {/* ================= 首頁 Tab ================= */}
             {ui.tab === 'home' && (
@@ -463,14 +436,14 @@ export default function App() {
                      <button onClick={() => updateUi({ modal: 'date' })} className={`flex items-center gap-2 font-bold text-lg ${t.text} ${t.bg} px-4 py-2 rounded-xl border ${t.border} active:scale-95`}>
                        {ui.date.getFullYear()}年{ui.date.getMonth() + 1}月 <ChevronDown className="w-5 h-5" />
                      </button>
-                     <span className={`font-bold text-lg ${t.textM}`}>總支出</span>
+                     <span className={`font-bold text-lg ${t.textM}`}>{settings.travelMode ? '旅遊總支出 (TWD)' : '總支出'}</span>
                   </div>
                   <div className="flex items-baseline gap-2 mb-6">
                     <span className={`text-5xl font-bold ${t.primaryText}`}>$</span>
                     <h2 className="text-[5rem] leading-none font-black tracking-tighter">{hStats.exp.toLocaleString()}</h2>
                   </div>
                   
-                  {rollover.enabled && (
+                  {rollover.enabled && !settings.travelMode && (
                     <div className={`mt-6 pt-5 border-t ${t.border}`}>
                        <div className="flex items-center gap-2 mb-3">
                          <Sparkles className={`w-5 h-5 text-rose-500`} />
@@ -496,6 +469,22 @@ export default function App() {
                     <Filter className="w-6 h-6" />
                   </button>
                 </div>
+
+                {/* ⚡ 一鍵記帳範本 (旅遊模式下隱藏) */}
+                {!settings.travelMode && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 px-2"><Zap className={`w-5 h-5 ${t.primaryText}`} /><h3 className="text-lg font-black">一鍵記帳</h3></div>
+                    <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
+                      {quickTemplates.map(qt => (
+                        <button key={qt.id} onClick={() => handleQuickAdd(qt)} className={`shrink-0 flex flex-col items-center justify-center p-4 rounded-2xl ${t.cardInner} border ${t.border} shadow-sm active:scale-95 min-w-[80px]`}>
+                          <span className="text-3xl mb-2">{qt.icon}</span>
+                          <span className={`text-xs font-extrabold ${t.textM}`}>{qt.name}</span>
+                          <span className="text-sm font-black mt-1">${qt.amount}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div className="flex justify-between items-center px-2">
@@ -839,7 +828,7 @@ export default function App() {
           <div className="fixed bottom-0 left-0 right-0 z-40 flex justify-center pointer-events-none">
             <div className="w-full max-w-md md:max-w-xl relative pointer-events-auto">
               <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-50">
-                <button onClick={() => updateUi({ modal: 'tx', selectedTx: null })} className={`h-[72px] w-[72px] ${ui.isDark ? 'bg-indigo-600' : 'bg-[#C86D23]'} text-white rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform border-[6px] ${ui.isDark ? 'border-[#1E293B]' : 'border-white'}`}>
+                <button onClick={() => updateUi({ modal: 'tx', selectedTx: null })} className={`h-[72px] w-[72px] ${ui.isDark ? 'bg-indigo-600' : 'bg-[#C86D23]'} text-white rounded-full flex items-center justify-center shadow-xl active:scale-95 transition-transform border-[6px] ${ui.isDark ? (settings.travelMode ? 'border-[#082f49]' : 'border-[#1E293B]') : (settings.travelMode ? 'border-[#e0f2fe]' : 'border-white')}`}>
                   <Plus className="w-8 h-8" strokeWidth={3} />
                 </button>
               </div>
@@ -878,7 +867,7 @@ export default function App() {
                     {ui.modal === 'settings' && <Settings className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'barcode' && <Barcode className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'notify' && <Bell className={`w-6 h-6 ${t.textM}`}/>}
-                    {ui.modal === 'tx' ? (ui.selectedTx ? '修改紀錄' : '新增紀錄') : ui.modal === 'settings' ? '設定與管理' : ui.modal === 'barcode' ? '發票載具與同步' : ui.modal === 'notify' ? '推播與通知' : '選單'}
+                    {ui.modal === 'tx' ? (ui.selectedTx ? '修改紀錄' : '新增紀錄') : ui.modal === 'settings' ? '設定與管理' : ui.modal === 'barcode' ? '發票載具' : ui.modal === 'notify' ? '推播與通知' : '選單'}
                   </h3>
                   <button onClick={() => updateUi({ modal: null, selectedTx: null })} className={`p-2.5 ${t.bg} rounded-full active:scale-95`}>
                     <X className={`w-6 h-6 ${t.textM}`}/>
@@ -888,13 +877,12 @@ export default function App() {
                 {/* 彈窗渲染 */}
                 {ui.modal === 'tx' && (
                   <TxForm 
-                    accounts={data.accounts} cats={CATEGORIES} tags={data.tags} initialData={ui.selectedTx} 
-                    onAI={() => updateUi({ modal: 'ai' })} onAddTag={handleAddGlobalTag}
+                    accounts={data.accounts} cats={CATEGORIES} tags={data.tags} initialData={ui.selectedTx} settings={settings}
+                    onAI={() => updateUi({ modal: 'ai' })} onAddTag={handleAddGlobalTag} showToast={showToast}
                     onSave={(txData) => { 
                       const { id, ...payload } = txData;
                       payload.updatedAt = serverTimestamp();
                       
-                      // 🛡️ 移除可能導致崩潰的 undefined 欄位
                       Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
 
                       if(id) {
@@ -934,10 +922,10 @@ export default function App() {
                   />
                 )}
                 {ui.modal === 'barcode' && (
-                  <BarcodeForm codes={{h:settings.husbandBarcode, hC:settings.husbandCert, w:settings.wifeBarcode, wC:settings.wifeCert}} onSave={(h,hC,w,wC) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), {husbandBarcode:h, husbandCert:hC, wifeBarcode:w, wifeCert:wC}, {merge:true}), '載具已儲存')} onSync={() => { showToast("成功抓取最新發票！"); updateUi({modal: null}); }} t={t} />
+                  <BarcodeForm codes={{h:settings.husbandBarcode, w:settings.wifeBarcode}} onSave={(h,w) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), {husbandBarcode:h, wifeBarcode:w}, {merge:true}), '載具已儲存')} t={t} />
                 )}
                 
-                {/* 🌟 完美的推播與通知面板 (新增消掉按鈕 X) */}
+                {/* 🌟 完美的推播與通知面板 */}
                 {ui.modal === 'notify' && (
                   <div className="space-y-4">
                     {activeAlerts.length === 0 ? (
@@ -954,7 +942,6 @@ export default function App() {
                           <h4 className="font-extrabold text-lg mb-1">{a.title}</h4>
                           <p className={`text-sm font-bold ${t.textM}`}>{a.desc}</p>
                         </div>
-                        {/* 🌟 單獨關閉該通知的按鈕 */}
                         <button 
                           onClick={() => setDismissedAlerts(prev => [...prev, a.id])} 
                           className={`absolute top-5 right-5 text-stone-400 hover:text-rose-500 active:scale-95 transition-colors`}
@@ -978,10 +965,7 @@ export default function App() {
                     onSave={d => {
                       const { id, ...payload } = d;
                       payload.updatedAt = serverTimestamp();
-                      
-                      // 🛡️ 防護：過濾掉 undefined
                       Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
-                      
                       if (id) {
                         doAction(() => updateDoc(getDocRef('shared_notes', id), payload), '修改成功');
                       } else {
@@ -1027,8 +1011,8 @@ export default function App() {
 // 4. 獨立子組件庫 (Forms & Modals)
 // ==========================================
 
-// 🌟 記帳表單 (含真四則運算 4x4 計算機)
-const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, ui }) => {
+// 🌟 記帳表單 (新增 OCR 拍照辨識與旅遊模式)
+const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, settings, showToast, t, ui }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, type: initialData?.type || 'expense', category: initialData?.category || cats.expense[0].name, 
     accountId: initialData?.accountId || (accounts[0]?.id || ''), fromAccountId: initialData?.fromAccountId || (accounts[0]?.id || ''),
@@ -1038,8 +1022,12 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
   
   const [showK, setShowK] = useState(true);
   const [newTag, setNewTag] = useState('');
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const fileInputRef = useRef(null);
   
-  // 🧮 支援四則運算的防呆計算邏輯
+  // 判斷是否啟用外幣模式 (僅限新增記帳時套用，編輯舊資料不套用)
+  const isTravel = settings?.travelMode && !initialData && data.type === 'expense';
+  
   const evaluateMath = (str) => {
     try {
       if (!str) return '';
@@ -1054,8 +1042,7 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
 
   const handleKey = (k) => {
     if (k === 'OK') {
-      const finalAmt = evaluateMath(data.amount);
-      setData({...data, amount: finalAmt});
+      setData({...data, amount: evaluateMath(data.amount)});
       setShowK(false);
     } 
     else if (k === '=') setData({...data, amount: evaluateMath(data.amount)});
@@ -1065,13 +1052,70 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
   };
 
   const submit = () => { 
-    const finalAmount = Number(evaluateMath(data.amount));
-    if (finalAmount > 0) onSave({...data, amount: finalAmount}); 
+    const mathAmount = Number(evaluateMath(data.amount));
+    if (mathAmount <= 0) return;
+    
+    let finalAmount = mathAmount;
+    let finalNote = data.note;
+
+    // 若啟用旅遊模式，進行匯率換算與備註加工
+    if (isTravel) {
+      finalAmount = Math.round(mathAmount * settings.travelRate);
+      finalNote = `[${settings.travelCurrency} ${mathAmount}] ${data.note}`.trim();
+    }
+    
+    onSave({...data, amount: finalAmount, note: finalNote}); 
   };
   
   const handleAddNewTag = () => {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
       onAddTag(newTag.trim()); setData(prev => ({ ...prev, tags: [...prev.tags, newTag.trim()] })); setNewTag('');
+    }
+  };
+
+  // 📸 發票 OCR 拍照辨識引擎
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!apiKey) return showToast("請先設定 API 金鑰才能使用拍照辨識", "error");
+    
+    setIsOcrLoading(true);
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64 = reader.result.split(',')[1];
+        const payload = {
+          contents: [{
+            parts: [
+              { text: "請分析這張收據或發票。請擷取「總金額」(只要數字)、「最可能的消費分類」(從這幾個選：餐飲,購物,交通,居家,娛樂,醫療,教育,其他)、「商店名稱或購買品項(做為備註)」。請以純 JSON 格式回傳，格式範例：{\"amount\": 100, \"category\": \"餐飲\", \"note\": \"7-11\"}。若有無法辨識的欄位請給空字串。" },
+              { inline_data: { mime_type: file.type, data: base64 } }
+            ]
+          }],
+          generationConfig: { responseMimeType: "application/json" }
+        };
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        
+        if(!res.ok) throw new Error("API連線失敗");
+        const result = await res.json();
+        const parsed = JSON.parse(result.candidates[0].content.parts[0].text);
+        
+        setData(prev => ({
+          ...prev,
+          amount: parsed.amount ? String(parsed.amount) : prev.amount,
+          category: parsed.category || prev.category,
+          note: parsed.note || prev.note
+        }));
+        showToast("📸 辨識成功！請確認金額與分類");
+      };
+    } catch (err) {
+      showToast("圖片辨識失敗，請重試或手動輸入", "error");
+    } finally {
+      setIsOcrLoading(false);
+      if(fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -1089,14 +1133,22 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
         <button onClick={() => setData({...data, type:'transfer', category:''})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'transfer' ? `${t.cardInner} shadow-sm` : t.textM}`}>轉帳</button>
       </div>
       
-      {/* 🌟 可折疊金額輸入區 */}
+      {/* 🌟 帶有多幣別提示的金額輸入區 */}
       <div onClick={() => setShowK(!showK)} className={`flex justify-between items-center py-4 border-b ${t.border} cursor-pointer active:opacity-70`}>
         <span className={`font-bold text-sm ${t.textM} px-1`}>金額輸入</span>
-        <div className="flex items-center gap-2">
-          <span className="text-5xl font-black">${data.amount || '0'}</span>
-          <div className={`w-7 h-7 rounded-full border ${t.border} flex items-center justify-center`}>
-            <ChevronDown className={`w-4 h-4 ${t.textM} transition-transform ${!showK ? '-rotate-90' : ''}`} />
+        <div className="flex flex-col items-end">
+          <div className="flex items-center gap-2">
+            <span className="text-3xl font-bold opacity-50">{isTravel ? settings.travelCurrency : '$'}</span>
+            <span className="text-5xl font-black">{data.amount || '0'}</span>
+            <div className={`w-7 h-7 rounded-full border ${t.border} flex items-center justify-center ml-1`}>
+              <ChevronDown className={`w-4 h-4 ${t.textM} transition-transform ${!showK ? '-rotate-90' : ''}`} />
+            </div>
           </div>
+          {isTravel && data.amount && (
+            <span className={`text-sm font-bold ${t.textM} mt-1`}>
+              ≈ NT$ {Math.round(Number(evaluateMath(data.amount)) * settings.travelRate).toLocaleString()}
+            </span>
+          )}
         </div>
       </div>
       
@@ -1149,10 +1201,14 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
           </div>
         </div>
 
-        {/* 📷 備註與相機 */}
+        {/* 📸 備註與 OCR 相機 */}
         <div className="flex gap-3">
           <input type="text" placeholder="備註..." value={data.note} onChange={e => setData({...data, note: e.target.value})} className={`flex-1 p-4 rounded-xl ${t.bg} border-none font-bold text-base outline-none focus:ring-2 ${t.ring}`} />
-          <button className={`p-4 rounded-xl font-bold flex items-center justify-center active:scale-95 ${t.bg} border-none ${t.textM}`} onClick={() => alert("相機上傳功能即將推出！")}><Camera className="w-6 h-6" /></button>
+          
+          <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" capture="environment" className="hidden" />
+          <button onClick={() => fileInputRef.current.click()} disabled={isOcrLoading} className={`p-4 rounded-xl font-bold flex items-center justify-center active:scale-95 ${t.bg} border-none ${t.textM} ${isOcrLoading ? 'opacity-50' : ''}`}>
+            {isOcrLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Camera className="w-6 h-6" />}
+          </button>
         </div>
         
         {data.type !== 'transfer' && (
@@ -1205,85 +1261,35 @@ const TxForm = ({ accounts, cats, tags, initialData, onAI, onAddTag, onSave, t, 
 };
 
 // ==========================================
-// 🌟 AI 語音記帳表單 
-// ==========================================
-const AIForm = ({ cats, accounts, onBack, onSave, showToast, t }) => {
-  const [text, setText] = useState(''); 
-  const [loading, setLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef(null);
-  
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.lang = 'zh-TW';
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.onresult = (e) => {
-        const transcript = e.results[0][0].transcript;
-        setText(prev => prev ? `${prev} ${transcript}` : transcript);
-      };
-      recognitionRef.current.onend = () => setIsListening(false);
-      recognitionRef.current.onerror = () => setIsListening(false);
-    }
-  }, []);
-
-  const toggleListening = () => {
-    if (!recognitionRef.current) return showToast("您的瀏覽器不支援語音功能，請用打字的", "error");
-    if (isListening) recognitionRef.current.stop();
-    else { recognitionRef.current.start(); setIsListening(true); }
-  };
-  
-  const handleParse = async () => {
-    if (!apiKey || apiKey.includes("請把AIzaSy")) {
-      showToast("系統未設定 API 金鑰，無法啟用 AI 服務", "error");
-      return;
-    }
-    if (!text.trim()) return; 
-    setLoading(true);
-    try {
-       const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            contents: [{ parts: [{ text: `請將以下語言記帳轉換為JSON。語言：「${text}」。這是家庭帳本。必填欄位：amount(數字), category(從[${cats.expense.map(c=>c.name).join(',')}]選), type('expense'/'income'/'transfer'), accountId(選擇一個 ID: [${accounts.map(a=>`${a.name}:${a.id}`).join(',')}]), payer('husband'/'wife'/'joint'), note(備註)。若無法判斷則填預設值。` }] }], 
-            generationConfig: { responseMimeType: "application/json" } 
-          })
-       });
-       
-       if(!resData || !resData.candidates || !resData.candidates[0]) throw new Error("無回應");
-       const result = JSON.parse(resData.candidates[0].content.parts[0].text);
-       
-       onSave({ 
-         amount: result.amount || 0, category: result.category || cats.expense[0].name, type: result.type || 'expense', 
-         accountId: result.accountId || accounts[0]?.id || '', payer: result.payer || 'joint', split: 'half', note: result.note || '', tags: ['AI記帳']
-       });
-    } catch (e) { showToast("AI 解析失敗，請確認網路", "error"); } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="space-y-4 flex flex-col h-full">
-      <button onClick={onBack} className={`text-sm font-bold ${t.textM} mb-2 flex items-center gap-1.5 shrink-0`}><ChevronLeft className="w-4 h-4"/> 返回手動記帳</button>
-      <div className="relative flex-1">
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="點擊右下角麥克風說話，例如：「昨天去全聯買便當花了 200，老婆付的...」" className={`w-full h-full p-6 rounded-3xl font-bold text-xl resize-none focus:ring-2 ${t.ring} ${t.bg} border-none outline-none`} />
-        <button onClick={toggleListening} className={`absolute bottom-5 right-5 p-5 rounded-full shadow-2xl transition-transform ${isListening ? 'bg-rose-500 text-white animate-pulse scale-110' : `${t.primary} text-white hover:scale-105`}`}>
-          {isListening ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
-        </button>
-      </div>
-      <button onClick={handleParse} disabled={loading || !text} className={`w-full py-5 rounded-2xl font-black text-xl ${t.primary} text-white flex justify-center items-center gap-2 mt-3 shrink-0 shadow-lg disabled:opacity-50 active:scale-95`}>
-        {loading ? <Loader2 className="animate-spin w-6 h-6"/> : <Sparkles className="w-6 h-6"/>} 交給 AI 自動解析
-      </button>
-    </div>
-  );
-}
-
-// ==========================================
-// 高質感設定表單
+// 高質感設定表單 (新增旅遊模式設定)
 // ==========================================
 const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
   const [s, setS] = useState(settings);
-  const isDark = t.bg.includes('0F172A') || t.bg.includes('1E1B18'); 
+  const isDark = t.bg.includes('0F172A') || t.bg.includes('1E1B18') || t.bg.includes('082f49'); 
   return (
     <div className="space-y-4">
+      
+      {/* ✈️ 旅遊模式設定區塊 */}
+      <div className={`${t.bg} rounded-3xl p-5 border ${t.border} shadow-sm border-sky-200`}>
+         <h4 className={`font-bold text-sm ${t.textM} mb-4 flex items-center gap-2`}><Plane className="w-5 h-5 text-sky-500"/>旅遊 / 多幣別模式</h4>
+         <div className="flex justify-between items-center mb-4">
+           <span className={`font-bold text-sm ${t.text}`}>啟用旅遊模式</span>
+           <ToggleSwitch checked={s.travelMode} onChange={val => setS({...s, travelMode: val})} isDark={isDark} />
+         </div>
+         {s.travelMode && (
+           <div className="grid grid-cols-2 gap-3 pt-3 border-t border-black/5">
+             <div className="space-y-2">
+               <span className={`text-xs ${t.textM} font-bold px-1`}>外幣代號</span>
+               <input type="text" value={s.travelCurrency} onChange={e => setS({...s, travelCurrency: e.target.value.toUpperCase()})} placeholder="如: JPY" className={`w-full ${t.cardInner} p-3 rounded-xl font-bold text-sm border-none outline-none text-center`} />
+             </div>
+             <div className="space-y-2">
+               <span className={`text-xs ${t.textM} font-bold px-1`}>匯率 (乘上)</span>
+               <input type="number" step="0.001" value={s.travelRate} onChange={e => setS({...s, travelRate: Number(e.target.value)})} placeholder="如: 0.21" className={`w-full ${t.cardInner} p-3 rounded-xl font-bold text-sm border-none outline-none text-center`} />
+             </div>
+           </div>
+         )}
+      </div>
+
       <div className={`${t.bg} rounded-3xl p-5 border ${t.border} shadow-sm space-y-4`}>
          <h4 className={`font-bold text-sm ${t.textM} mb-2`}>家庭總預算</h4>
          <div className={`flex items-center gap-2 ${t.cardInner} rounded-2xl p-4`}>
@@ -1293,10 +1299,6 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
          <div className={`flex justify-between items-center pt-2`}>
            <span className={`font-bold text-sm ${t.text}`}>預算結轉機制</span>
            <ToggleSwitch checked={s.enableRollover} onChange={val => setS({...s, enableRollover: val})} isDark={isDark} />
-         </div>
-         <div className={`flex justify-between items-center pt-2 border-t ${t.border}`}>
-           <span className={`font-bold text-sm ${t.text}`}>開啟自動同步發票</span>
-           <ToggleSwitch checked={s.autoSyncInvoices} onChange={val => setS({...s, autoSyncInvoices: val})} isDark={isDark} />
          </div>
       </div>
 
@@ -1350,7 +1352,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
 };
 
 // ==========================================
-// 🌟 實體條碼展示與載具設定表單
+// 🌟 實體條碼展示與載具設定表單 (純淨版)
 // ==========================================
 const BarcodeDisplay = ({ code, t }) => {
   const safeCode = code ? encodeURIComponent(code) : '';
@@ -1372,10 +1374,10 @@ const BarcodeDisplay = ({ code, t }) => {
   );
 };
 
-const BarcodeForm = ({ codes, onSave, onSync, t }) => {
+const BarcodeForm = ({ codes, onSave, t }) => {
   const [tab, setTab] = useState('h');
-  const [h, setH] = useState(codes.h || ''); const [hC, setHC] = useState(codes.hC || ''); 
-  const [w, setW] = useState(codes.w || ''); const [wC, setWC] = useState(codes.wC || '');
+  const [h, setH] = useState(codes.h || '');
+  const [w, setW] = useState(codes.w || '');
   const [mode, setMode] = useState('view'); 
   
   return (
@@ -1389,7 +1391,7 @@ const BarcodeForm = ({ codes, onSave, onSync, t }) => {
         <div className={`p-5 rounded-3xl ${t.bg} space-y-4`}>
           <BarcodeDisplay code={tab === 'h' ? h : w} t={t} />
           <button onClick={() => setMode('edit')} className={`w-full py-4 rounded-xl font-bold text-sm border ${t.border} ${t.cardInner} ${t.text} shadow-sm active:scale-95`}>
-            修改條碼與密碼
+            修改條碼
           </button>
         </div>
       ) : (
@@ -1398,24 +1400,15 @@ const BarcodeForm = ({ codes, onSave, onSync, t }) => {
             <label className={`text-xs font-bold ${t.textM} px-1`}>{tab === 'h' ? '老公' : '老婆'} 手機條碼</label>
             <input value={tab === 'h' ? h : w} onChange={e => tab === 'h' ? setH(e.target.value.toUpperCase()) : setW(e.target.value.toUpperCase())} className={`w-full p-4 rounded-xl uppercase font-mono text-base font-bold ${t.cardInner} border ${t.border} shadow-sm outline-none focus:ring-2 ${t.ring}`} placeholder="/..." />
           </div>
-          <div className="space-y-2">
-            <label className={`text-xs font-bold ${t.textM} px-1`}>驗證碼 (密碼)</label>
-            <input type="password" value={tab === 'h' ? hC : wC} onChange={e => tab === 'h' ? setHC(e.target.value) : setWC(e.target.value)} className={`w-full p-4 rounded-xl font-bold text-base ${t.cardInner} border ${t.border} shadow-sm outline-none focus:ring-2 ${t.ring}`} placeholder="用於同步發票" />
-          </div>
-          <button onClick={() => { onSave(h, hC, w, wC); setMode('view'); }} className={`w-full py-4 rounded-xl font-bold text-base text-white shadow-md ${t.primary} mt-2 active:scale-95`}>儲存設定</button>
+          <button onClick={() => { onSave(h, '', w, ''); setMode('view'); }} className={`w-full py-4 rounded-xl font-bold text-base text-white shadow-md ${t.primary} mt-2 active:scale-95`}>儲存設定</button>
         </div>
       )}
-
-      {/* 🌟 翠綠色發票同步按鈕 */}
-      <button onClick={onSync} className="w-full py-4 rounded-full font-bold text-sm text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center gap-2 shadow-sm active:scale-95">
-        <RefreshCw className="w-5 h-5"/> 手動同步最新發票
-      </button>
     </div>
   );
 };
 
 // ==========================================
-// 週期性記帳管理表單
+// 其他基本表單 (含 Recurring, Acc, Bill 等，均保留完整功能)
 // ==========================================
 const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
   const [view, setView] = useState('list');
@@ -1489,7 +1482,7 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
         <div className="space-y-5 flex-1 flex flex-col">
           <p className={`font-bold text-xs ${t.textM} px-1`}>設定時間到了要自動記下的內容：</p>
           <TxForm 
-            accounts={accounts} cats={cats} tags={[]} initialData={null} 
+            accounts={accounts} cats={cats} tags={[]} initialData={null} settings={{}}
             onAI={() => { alert('自動化規則請手動設定內容喔！') }} onAddTag={() => {}} 
             onSave={(txData) => { setR({ ...r, txData }); setStep(3); }} t={t} ui={{isDark: t.bg.includes('0F')}}
           />
@@ -1520,9 +1513,6 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
   );
 };
 
-// ==========================================
-// 其他基本表單
-// ==========================================
 const AccForm = ({ onSave, t }) => {
   const [n, setN] = useState(''); const [i, setI] = useState('🏦');
   return (
