@@ -28,27 +28,10 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
 // 🤖 安全讀取 API Key：全自動讀取 Vercel 的 VITE_GEMINI_API_KEY
 const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || 
                (typeof process !== 'undefined' && process.env?.REACT_APP_GEMINI_API_KEY) || 
                ""; 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-// 🤖 您的專屬 Gemini API 金鑰 (使用最新截圖上的這把)
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-=======
-// 🤖 您的專屬 Gemini API 金鑰
-// ⚠️ 請確保這是一把 "AIzaSy" 開頭的合法金鑰，AQ 開頭的憑證會被瀏覽器擋下
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
 
 // 🌟 純家庭帳本分類設定 (無工作室)
 const CATEGORIES = {
@@ -85,16 +68,6 @@ const getDocRef = (colName, docId) => {
 
 // ==========================================
 // 🛡️ API 防護網 (包含錯誤攔截)
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-// 🛡️ API 防護網 (包含錯誤攔截)
-=======
-// 🛡️ API 防護網 
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
 // ==========================================
 const fetchWithBackoff = async (url, options, retries = 3) => {
   const delays = [1000, 2000, 4000];
@@ -139,19 +112,7 @@ export default function App() {
     enableRollover: true, notifyLargeExpense: true, largeExpenseThreshold: 3000, 
     notifyBillDue: true, notifyEvents: true, notifyAdvanceDays: 3,
     travelMode: false, travelCurrency: 'JPY', travelRate: 0.21,
-<<<<<<< HEAD
-<<<<<<< HEAD
     uiFontSize: 'md' 
-=======
-<<<<<<< HEAD
-    uiFontSize: 'md' // 🌟 字體大小設定
-=======
-    uiFontSize: 'md' // 🌟 新增字體大小設定
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
-    uiFontSize: 'md' 
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
   });
   
   const [ui, setUi] = useState({ 
@@ -363,10 +324,6 @@ export default function App() {
 
   // 🔔 系統通知
   const rawAlerts = useMemo(() => {
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
     const a = []; 
     const today = new Date().getDate(); 
     const notifyDays = settings.notifyAdvanceDays || 3;
@@ -387,32 +344,6 @@ export default function App() {
         }
       });
     }
-<<<<<<< HEAD
-
-    if (settings.notifyLargeExpense) {
-      mTx.slice(0, 15).forEach(t => { 
-        if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) {
-          a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}` }); 
-        }
-      });
-    }
-
-=======
-    const a = []; const today = new Date().getDate(); const notifyDays = settings.notifyAdvanceDays || 3;
-<<<<<<< HEAD
-    if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期`, time: '系統' }); });
-    if (settings.notifyEvents) data.events.forEach(e => { const d = calculateDaysDiff(e.date); if (d >= 0 && d <= notifyDays) a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天`, time: '系統' }); });
-    if (settings.notifyLargeExpense) data.tx.slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}`, time: t.date }); });
-=======
-    if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期` }); });
-    if (settings.notifyEvents) data.events.forEach(e => { const d = calculateDaysDiff(e.date); if (d >= 0 && d <= notifyDays) a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天` }); });
-    if (settings.notifyLargeExpense) mTx.slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}` }); });
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-    return a;
-  }, [data, settings]);
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
 
     if (settings.notifyLargeExpense) {
       mTx.slice(0, 15).forEach(t => { 
@@ -469,31 +400,10 @@ export default function App() {
     } catch (err) {}
   };
 
-<<<<<<< HEAD
-<<<<<<< HEAD
   // 🤖 AI 顧問呼叫 (完美使用 cURL Header 寫法，拒絕 401 錯誤)
   const handleCallAI = async () => {
     if (!apiKey) {
       showToast("系統未設定 API 金鑰！請在 Vercel 設定 VITE_GEMINI_API_KEY", "error");
-=======
-<<<<<<< HEAD
-  // 🤖 AI 顧問呼叫 (💯 完美套用您的 cURL 邏輯，使用 X-goog-api-key)
-  const handleCallAI = async () => {
-    if (!apiKey) {
-      showToast("系統未設定 API 金鑰", "error");
-=======
-  // 🤖 AI 顧問呼叫
-  const handleCallAI = async () => {
-    if (!apiKey || apiKey.includes("請在此貼上")) {
-      showToast("系統未設定 API 金鑰，請於程式碼補上", "error");
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
-  // 🤖 AI 顧問呼叫 (完美使用 cURL Header 寫法，拒絕 401 錯誤)
-  const handleCallAI = async () => {
-    if (!apiKey) {
-      showToast("系統未設定 API 金鑰！請在 Vercel 設定 VITE_GEMINI_API_KEY", "error");
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
       return;
     }
     setIsAiLoading(true); 
@@ -512,41 +422,13 @@ export default function App() {
           'Content-Type': 'application/json',
           'X-goog-api-key': apiKey 
         },
-<<<<<<< HEAD
-=======
-      let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老婆需給老公${Math.round(settlement.amt)}` : `老公需給老婆${Math.round(settlement.amt)}`);
-      const prompt = `這是家庭帳本本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
-      
-      // 🌟 嚴格套用您提供的 cURL 端點與 Header
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
-      const options = {
-        method: 'POST',
-<<<<<<< HEAD
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-goog-api-key': apiKey 
-        },
-=======
-        headers: { 'Content-Type': 'application/json' },
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       };
 
       const resData = await fetchWithBackoff(url, options);
       
       if (!resData || !resData.candidates) throw new Error("API 回傳格式錯誤或遭拒絕，請確認金鑰權限");
-<<<<<<< HEAD
-<<<<<<< HEAD
       
-=======
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
-      
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
       setAiAnalysis(resData.candidates[0].content.parts[0].text);
     } catch (err) { 
       setAiAnalysis(`AI 服務連線異常：${err.message}`); 
@@ -557,15 +439,6 @@ export default function App() {
   };
 
   // 匯出 CSV 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-  // 匯出 CSV 
-=======
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
   const handleExportToSheets = () => {
     if (data.tx.length === 0) {
       return showToast("目前沒有資料可以匯出喔！", "error"); 
@@ -1284,19 +1157,7 @@ export default function App() {
 // 4. 獨立子組件庫 (Forms & Modals)
 // ==========================================
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 // 🌟 記帳表單 (視覺鎖定計算機 + 一鍵範本 + 折疊按鈕 + OCR 防呆 + 全自動付款人判斷)
-=======
-<<<<<<< HEAD
-// 🌟 記帳表單 (視覺鎖定計算機 + 一鍵範本 + OCR 防呆)
-=======
-// 🌟 記帳表單 (視覺鎖定計算機 + 一鍵範本 + 自動判斷付款人)
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
-// 🌟 記帳表單 (視覺鎖定計算機 + 一鍵範本 + 折疊按鈕 + OCR 防呆 + 全自動付款人判斷)
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
 const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, t, ui }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, type: initialData?.type || 'expense', 
@@ -1337,16 +1198,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       data.note = `[${settings.travelCurrency} ${data.amount}] ${data.note}`;
     }
     if (finalAmount > 0) {
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
-      // 🌟 自動判斷付款人 (從誰的帳戶出，就是誰付)
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
       const acc = accounts.find(a => a.id === data.accountId);
       const autoPayer = acc ? acc.type : 'joint'; 
       const autoSplit = autoPayer === 'joint' ? 'joint' : 'half';
@@ -1373,19 +1224,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
-<<<<<<< HEAD
-<<<<<<< HEAD
     if (!file || !apiKey) return alert("請先在 Vercel 或環境變數中設定 API 金鑰");
-=======
-<<<<<<< HEAD
-    if (!file || !apiKey) return alert("請先設定正確的 API 金鑰");
-=======
-    if (!file || !apiKey || apiKey.includes("請在此貼上")) return alert("請先設定正確的 API 金鑰");
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
-    if (!file || !apiKey) return alert("請先在 Vercel 或環境變數中設定 API 金鑰");
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
     
     setIsOCR(true);
     try {
@@ -1395,7 +1234,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         const base64Data = reader.result.split(',')[1];
         
         // 🌟 嚴格套用 cURL 邏輯，使用 Header 傳送
-<<<<<<< HEAD
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
         const options = {
           method: 'POST',
@@ -1403,28 +1241,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
             'Content-Type': 'application/json',
             'X-goog-api-key': apiKey
           },
-=======
-<<<<<<< HEAD
-        
-        // 🌟 OCR 辨識套用 Header 認證
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
-        const options = {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-goog-api-key': apiKey
-          },
-<<<<<<< HEAD
-=======
-        const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
           body: JSON.stringify({
             contents: [{ parts: [
               { text: `請分析這張收據/發票，並回傳 JSON 格式。包含：amount (數字，總金額), note (字串，商店名稱或購買品項)。若無法辨識則留空。` },
@@ -1435,18 +1251,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         };
 
         const resData = await fetchWithBackoff(url, options);
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-        };
-
-        const resData = await fetchWithBackoff(url, options);
-=======
-        });
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
 
         if (resData.candidates) {
           const rawText = resData.candidates[0].content.parts[0].text;
@@ -1458,19 +1262,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       };
     } catch (err) {
       console.error(err);
-<<<<<<< HEAD
-<<<<<<< HEAD
       alert(`照片解析失敗: ${err.message}`);
-=======
-<<<<<<< HEAD
-      alert("照片解析失敗，請確認金鑰或重試");
-=======
-      alert("照片解析失敗，可能為金鑰權限問題");
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
-      alert(`照片解析失敗: ${err.message}`);
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
       setIsOCR(false);
     }
   };
@@ -1505,23 +1297,8 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         )}
         
         <div className={`flex ${t.bg} p-1.5 rounded-2xl border ${t.border}`}>
-<<<<<<< HEAD
-<<<<<<< HEAD
           <button onClick={() => setData({...data, type:'expense', category:cats.expense[0]?.name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'expense' ? `${t.cardInner} shadow-sm` : t.textM}`}>支出</button>
           <button onClick={() => setData({...data, type:'income', category:cats.income[0]?.name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'income' ? `${t.cardInner} shadow-sm` : t.textM}`}>收入</button>
-=======
-<<<<<<< HEAD
-          <button onClick={() => setData({...data, type:'expense', category:cats?.expense?.[0]?.name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'expense' ? `${t.cardInner} shadow-sm` : t.textM}`}>支出</button>
-          <button onClick={() => setData({...data, type:'income', category:cats?.income?.[0]?.name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'income' ? `${t.cardInner} shadow-sm` : t.textM}`}>收入</button>
-=======
-          <button onClick={() => setData({...data, type:'expense', category:cats.expense[0].name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'expense' ? `${t.cardInner} shadow-sm` : t.textM}`}>支出</button>
-          <button onClick={() => setData({...data, type:'income', category:cats.income[0].name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'income' ? `${t.cardInner} shadow-sm` : t.textM}`}>收入</button>
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
-          <button onClick={() => setData({...data, type:'expense', category:cats.expense[0]?.name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'expense' ? `${t.cardInner} shadow-sm` : t.textM}`}>支出</button>
-          <button onClick={() => setData({...data, type:'income', category:cats.income[0]?.name})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'income' ? `${t.cardInner} shadow-sm` : t.textM}`}>收入</button>
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
           <button onClick={() => setData({...data, type:'transfer', category:''})} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${data.type === 'transfer' ? `${t.cardInner} shadow-sm` : t.textM}`}>轉帳</button>
         </div>
         
@@ -1642,19 +1419,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
 };
 
 // ==========================================
-<<<<<<< HEAD
-<<<<<<< HEAD
 // 🌟 AI 語音記帳表單 (嚴格套用 cURL Header 認證)
-=======
-<<<<<<< HEAD
-// 🌟 AI 語音記帳表單 (完美 Header 認證版)
-=======
-// 🌟 AI 語音記帳表單 
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
-// 🌟 AI 語音記帳表單 (嚴格套用 cURL Header 認證)
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
 // ==========================================
 const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
   const [text, setText] = useState(''); 
@@ -1686,33 +1451,12 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
   const handleParse = async () => {
     if (!apiKey) {
       showToast("系統未設定 API 金鑰，請檢查 Vercel 環境變數", "error");
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-    if (!apiKey) {
-      showToast("系統未設定 API 金鑰", "error");
-=======
-    if (!apiKey || apiKey.includes("請在此貼上")) {
-      showToast("錯誤：請前往 Google AI Studio 申請新金鑰", "error");
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
       return;
     }
     if (!text.trim()) return; 
     setLoading(true);
     try {
-<<<<<<< HEAD
-<<<<<<< HEAD
        // 🌟 語音辨識嚴格套用 cURL 邏輯，使用 Header 傳送金鑰
-       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
-=======
-<<<<<<< HEAD
-       // 🌟 語音辨識套用 Header 認證
-=======
-       // 🌟 語音辨識嚴格套用 cURL 邏輯，使用 Header 傳送金鑰
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
        const options = {
           method: 'POST', 
@@ -1722,26 +1466,6 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
           },
           body: JSON.stringify({ 
             contents: [{ parts: [{ text: `請將以下語言記帳轉換為JSON。語言：「${text}」。這是家庭帳本。必填欄位：amount(數字), category(從[${cats?.expense?.map(c=>c.name).join(',')}]選), type('expense'/'income'/'transfer'), accountId(請挑選最合理的帳戶 ID: [${accounts.map(a=>`${a.name}:${a.id}`).join(',')}]), note(備註)。若無法判斷則填預設值。` }] }]
-<<<<<<< HEAD
-=======
-       // 🌟 解決 401 錯誤：將 Key 綁定於 URL
-       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-       const options = {
-          method: 'POST', 
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-goog-api-key': apiKey
-          },
-          body: JSON.stringify({ 
-<<<<<<< HEAD
-            contents: [{ parts: [{ text: `請將以下語言記帳轉換為JSON。語言：「${text}」。這是家庭帳本。必填欄位：amount(數字), category(從[${cats?.expense?.map(c=>c.name).join(',')}]選), type('expense'/'income'/'transfer'), accountId(請挑選最合理的帳戶 ID: [${accounts.map(a=>`${a.name}:${a.id}`).join(',')}]), note(備註)。若無法判斷則填預設值。` }] }]
-=======
-            contents: [{ parts: [{ text: `請將以下語言記帳轉換為JSON。語言：「${text}」。這是家庭帳本。必填欄位：amount(數字), category(從[${cats.expense.map(c=>c.name).join(',')}]選), type('expense'/'income'/'transfer'), accountId(請挑選最合理的帳戶 ID: [${accounts.map(a=>`${a.name}:${a.id}`).join(',')}]), note(備註)。若無法判斷則填預設值。` }] }]
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
           })
        };
 
@@ -1753,17 +1477,6 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
        const result = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
        
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-       // 自動推導付款人
-=======
-       // 🌟 自動推導付款人
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
        const acc = accounts.find(a => a.id === result.accountId) || accounts[0];
        const autoPayer = acc ? acc.type : 'joint';
        const autoSplit = autoPayer === 'joint' ? 'joint' : 'half';
@@ -1771,17 +1484,6 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
        onSave({ 
          amount: result.amount || 0, category: result.category || cats?.expense?.[0]?.name, type: result.type || 'expense', 
          accountId: acc.id, payer: autoPayer, split: autoSplit, note: result.note || '', tags: ['AI記帳']
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-         amount: result.amount || 0, category: result.category || cats?.expense?.[0]?.name, type: result.type || 'expense', 
-=======
-         amount: result.amount || 0, category: result.category || cats.expense[0].name, type: result.type || 'expense', 
->>>>>>> 79b321d9648c50be84c9457dde308085e7a272f5
-         accountId: acc.id, payer: autoPayer, split: 'half', note: result.note || '', tags: ['AI記帳']
->>>>>>> 0a70a27329e6da1ea72f928b593c821d773e1dc9
-=======
->>>>>>> 837336ea2b73420bac21cab041a521b294ba6e44
        });
     } catch (e) { showToast(`AI 解析失敗: ${e.message}`, "error"); } finally { setLoading(false); }
   };
