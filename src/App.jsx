@@ -119,9 +119,14 @@ export default function App() {
     uiFontSize: 'md' 
   });
   
-  const [ui, setUi] = useState({ 
-    date: new Date(), tab: 'home', subTab: 'bills', statsView: 'month', chartView: 'expense', modal: null, search: '', filterTags: [], filterAccount: 'all',
-    isDark: true, confirm: null, selectedItem: null, toast: null, selectedTx: null 
+  // 🌟 從手機本地記憶讀取個人主題偏好 (老公暗色/老婆亮色互不干擾)
+  const [ui, setUi] = useState(() => {
+    const savedTheme = localStorage.getItem('app_theme');
+    const isDark = savedTheme !== null ? savedTheme === 'dark' : true;
+    return { 
+      date: new Date(), tab: 'home', subTab: 'bills', statsView: 'month', modal: null, search: '', filterTags: [], filterAccount: 'all', 
+      isDark: isDark, confirm: null, selectedItem: null, toast: null, selectedTx: null 
+    };
   });
   
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
@@ -470,13 +475,18 @@ export default function App() {
           {/* 🌟 頂部 Header */}
           <header className={`px-6 pt-safe pb-4 flex justify-between items-center ${t.cardInner} z-10 shrink-0`}>
             <div className="flex gap-3 w-24">
-               <button onClick={() => updateUi({ isDark: !ui.isDark })} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform`}>
+               <button onClick={() => { 
+                 const nextDark = !ui.isDark; 
+                 localStorage.setItem('app_theme', nextDark ? 'dark' : 'light'); 
+                 updateUi({ isDark: nextDark }); 
+               }} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform`}>
                  {ui.isDark ? <Sun className="w-5 h-5"/> : <Moon className="w-5 h-5"/>}
                </button>
                <button onClick={() => updateUi({ modal: 'settings' })} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform`}>
                  <Settings className="w-5 h-5"/>
                </button>
             </div>
+            
             <div className="flex-1 text-center">
               <h1 className="text-2xl font-black tracking-wide flex items-center justify-center gap-1.5">
                 {settings.travelMode && <Plane className="w-5 h-5 text-[#0074D9]" />} 
