@@ -3,7 +3,7 @@ import {
   Plus, X, Trash2, Sparkles, ChevronLeft, ChevronRight, Target, Coins, 
   PieChart as PieChartIcon, ArrowRightLeft, Home, Search, Settings, CheckCircle2, AlertTriangle,
   Barcode, Camera, ClipboardList, StickyNote, Edit3, CalendarHeart, Mic, MicOff,
-  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane, ArrowRight, Tag, ReceiptText, Keyboard
+  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane, ArrowRight, Tag, ReceiptText, Keyboard, Calendar
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -28,12 +28,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 🤖 安全讀取 API Key：全自動讀取 Vercel 的 VITE_GEMINI_API_KEY
+// 🤖 安全讀取 API Key
 const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || 
                (typeof process !== 'undefined' && process.env?.REACT_APP_GEMINI_API_KEY) || 
                ""; 
 
-// 🌟 純家庭帳本分類設定 (無工作室)
+// 🌟 純家庭帳本分類設定
 const CATEGORIES = {
   expense: [
     { name: '餐飲', icon: '🍽️' }, { name: '購物', icon: '🛍️' }, { name: '交通', icon: '🚗' }, 
@@ -47,6 +47,7 @@ const CATEGORIES = {
 
 const getLocalYYYYMM = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 const getLocalYYYYMMDD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const getLocalHHmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 const calculateDaysDiff = (target) => Math.ceil((new Date(target).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
 
 // 🔥 智慧資料庫路徑設計 (純家庭，無 Workspace)
@@ -97,6 +98,9 @@ const ToggleSwitch = ({ checked, onChange, isDark }) => (
     <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
   </div>
 );
+
+// 下拉箭頭專用 (避免與 lucide-react 衝突，改名)
+const ArrowDownIconSVG = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 5v14M19 12l-7 7-7-7"/></svg>;
 
 // ==========================================
 // 2. 主程式 App Component
@@ -156,7 +160,7 @@ export default function App() {
     return onAuthStateChanged(auth, setUser);
   }, []);
 
-  // 資料監聽 (純家庭帳本)
+  // 資料監聽
   useEffect(() => {
     if (!user) return;
     const unsubs = [
@@ -185,7 +189,18 @@ export default function App() {
         setData(prev => ({ ...prev, templates: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))
       }),
       onSnapshot(getCol('shared_ledger'), snap => {
-        setData(p => ({ ...p, tx: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))
+        setData(p => ({ ...p, tx: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
+          // 先用日期排序，如果日期一樣再用時間排序
+          const dateA = a.date || '';
+          const dateB = b.date || '';
+          if (dateA !== dateB) return dateB.localeCompare(dateA);
+          
+          const timeA = a.recordTime || '';
+          const timeB = b.recordTime || '';
+          if (timeA !== timeB) return timeB.localeCompare(timeA);
+          
+          return b.createdAt?.toMillis() - a.createdAt?.toMillis();
+        }) }))
       }),
       onSnapshot(getCol('shared_bills'), snap => {
         setData(p => ({ ...p, bills: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.dueDate - b.dueDate) }))
@@ -224,6 +239,7 @@ export default function App() {
             ...rule.txData, 
             date: getLocalYYYYMMDD(dueDate), 
             month: getLocalYYYYMM(dueDate), 
+            recordTime: "08:00", 
             createdAt: serverTimestamp(), 
             createdBy: user.uid, 
             tags: [...(rule.txData.tags || []), '週期性'] 
@@ -264,16 +280,11 @@ export default function App() {
     if (t.type === 'expense') {
       s.exp += t.amount; 
       s.cat[t.category] = (s.cat[t.category] || 0) + t.amount;
-      if (t.payer === 'husband') s.hp += t.amount; 
-      if (t.payer === 'wife') s.wp += t.amount;
-      if (t.split === 'husband') s.ho += t.amount; 
-      else if (t.split === 'wife') s.wo += t.amount; 
-      else { s.ho += t.amount / 2; s.wo += t.amount / 2; }
     } else if (t.type === 'income') { 
       s.inc += t.amount; 
     }
     return s;
-  }, { exp: 0, inc: 0, cat: {}, ho: 0, wo: 0, hp: 0, wp: 0 });
+  }, { exp: 0, inc: 0, cat: {} });
 
   const hStats = calcStats(mTx);
   const tStats = calcStats(ui.statsView === 'month' ? mTx : yTx);
@@ -300,14 +311,18 @@ export default function App() {
   }, {});
   const totalAssets = Object.values(accBal).reduce((s, b) => s + b, 0);
 
-  // 🌟 終極精準結算邏輯 (代墊抵銷法)
+  // 🌟 終極精準結算邏輯 (代墊抵銷法) 包含個人不平分防護
   const settlement = useMemo(() => {
     const activeTxs = ui.statsView === 'month' ? mTx : yTx;
     let hOwesW = 0; // 老公欠老婆
     let wOwesH = 0; // 老婆欠老公
 
     activeTxs.forEach(t => {
+      // 只有「支出」才需要結算
       if (t.type !== 'expense') return;
+      // 如果這筆標記為「不平分 (none)」，代表是個人開銷，不計入代墊結算
+      if (t.split === 'none') return;
+      
       // 如果是老公付的，代表他幫老婆墊了一半的錢
       if (t.payer === 'husband') wOwesH += (t.amount / 2);
       // 如果是老婆付的，代表她幫老公墊了一半的錢
@@ -400,7 +415,7 @@ export default function App() {
     } catch (err) {}
   };
 
-  // 🤖 AI 顧問呼叫 (完美使用 cURL Header 寫法，拒絕 401 錯誤)
+  // 🤖 AI 顧問呼叫
   const handleCallAI = async () => {
     if (!apiKey) {
       showToast("系統未設定 API 金鑰！請在 Vercel 設定 VITE_GEMINI_API_KEY", "error");
@@ -411,10 +426,9 @@ export default function App() {
     
     try {
       const topCats = pieChartData.slice(0, 3).map(c => `${c.name}(${c.percentage}%)`).join('、');
-      let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老婆需給老公${Math.round(settlement.amt)}` : `老公需給老婆${Math.round(settlement.amt)}`);
+      let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老婆需給老公${Math.round(settlement.amt)}` : `老公需給老公${Math.round(settlement.amt)}`);
       const prompt = `這是家庭帳本本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
       
-      // 🌟 嚴格套用您提供的 cURL 端點與 Header
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
       const options = {
         method: 'POST',
@@ -445,16 +459,17 @@ export default function App() {
     }
     
     const BOM = "\uFEFF"; 
-    const headers = ['日期', '類型', '分類/轉出', '帳戶/轉入', '金額', '備註', '付款人', '標籤'];
+    const headers = ['日期', '時間', '類型', '分類/轉出', '帳戶/轉入', '金額', '備註', '付款人', '結算', '標籤'];
     const rows = data.tx.map(tx => {
       const typeLabel = tx.type === 'expense' ? '支出' : tx.type === 'income' ? '收入' : '轉帳';
       const catOrFrom = tx.type === 'transfer' ? data.accounts.find(a => a.id === tx.fromAccountId)?.name : tx.category;
       const accOrTo = tx.type === 'transfer' ? data.accounts.find(a => a.id === tx.toAccountId)?.name : data.accounts.find(a => a.id === tx.accountId)?.name;
       const payerLabel = tx.payer === 'husband' ? '老公' : tx.payer === 'wife' ? '老婆' : '共同';
+      const splitLabel = tx.type === 'expense' ? (tx.split === 'none' ? '不平分' : '平分') : '-';
       
       return [
-        tx.date, typeLabel, catOrFrom || '', accOrTo || '', tx.amount, 
-        `"${tx.note || ''}"`, payerLabel, tx.tags ? `"${tx.tags.join(';')}"` : ''
+        tx.date, tx.recordTime || '', typeLabel, catOrFrom || '', accOrTo || '', tx.amount, 
+        `"${tx.note || ''}"`, payerLabel, splitLabel, tx.tags ? `"${tx.tags.join(';')}"` : ''
       ].join(",");
     });
     
@@ -531,7 +546,7 @@ export default function App() {
       <div className={`min-h-[100dvh] w-full flex justify-center ${t.bg} transition-colors duration-500 overflow-x-hidden font-sans`}>
         <div className={`w-full max-w-md md:max-w-xl ${t.text} relative flex flex-col min-h-[100dvh] ${t.cardInner} md:border-x md:shadow-2xl ${t.border}`}>
           
-          {/* 🔥 刪除確認 Modal (設定 z-[9999] 保證絕對在最上層) */}
+          {/* 🔥 刪除確認 Modal */}
           {ui.confirm && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
               <div className={`${t.cardInner} rounded-3xl p-8 w-full max-w-xs shadow-2xl text-center border ${t.border}`}>
@@ -644,6 +659,14 @@ export default function App() {
                   ) : displayTx.map(tx => {
                     const catObj = CATEGORIES.expense.find(c=>c.name===tx.category) || CATEGORIES.income.find(c=>c.name===tx.category);
                     const icon = catObj ? catObj.icon : '📝';
+                    
+                    // 日期轉換為 dd/mm/yyyy 顯示
+                    let displayDateStr = tx.date;
+                    if (tx.date && tx.date.includes('-')) {
+                      const [y, m, d] = tx.date.split('-');
+                      displayDateStr = `${d}/${m}/${y}`;
+                    }
+                    
                     return (
                       <div key={tx.id} className={`p-5 rounded-3xl flex flex-col border ${t.border} ${t.cardInner} shadow-sm group`}>
                         <div className="flex items-center justify-between">
@@ -661,11 +684,18 @@ export default function App() {
                                 </span>
                               </p>
                               <div className="flex gap-2 mt-1.5 flex-wrap items-center">
-                                {tx.type !== 'transfer' && (
-                                  <span className={`text-xs px-2.5 py-1 rounded-lg font-bold ${t.bg} ${t.textM}`}>
-                                    付:{tx.payer==='husband'?'老公':tx.payer==='wife'?'老婆':'共同'}
-                                  </span>
-                                )}
+                              {/* 🌟 付款人與平分顯示邏輯 */}
+                              {tx.type !== 'transfer' && (
+                                <span className={`text-xs px-2.5 py-1 rounded-lg font-bold ${t.bg} ${t.textM}`}>
+                                  {tx.type === 'expense' ? '付:' : '收:'}
+                                  {tx.payer==='husband' ? '老公' : tx.payer==='wife' ? '老婆' : '共同'}
+                                  {tx.type === 'expense' ? (tx.split === 'none' ? ' (不平分)' : ' (平分)') : ''}
+                                </span>
+                              )}
+                              {/* 🌟 顯示日期與時間 */}
+                              <span className={`text-xs px-2.5 py-1 rounded-lg font-bold ${t.bg} ${t.textM}`}>
+                                  {displayDateStr} {tx.recordTime || ''}
+                                </span>
                                 {tx.tags?.map(tg => <span key={tg} className={`text-xs font-bold ${t.primaryText}`}>#{tg}</span>)}
                                 <span className={`text-sm ${t.textM} font-bold truncate max-w-[180px] ml-1`}>{tx.note}</span>
                               </div>
@@ -1031,14 +1061,17 @@ export default function App() {
                       onSaveTemplate={(tpl) => doAction(() => addDoc(getCol('shared_templates'), {...tpl, createdAt: serverTimestamp()}), '範本已儲存')}
                       onDeleteTemplate={(id) => doAction(() => deleteDoc(getDocRef('shared_templates', id)), '範本已移除')}
                       onSave={(txData) => { 
-                        const { id, ...payload } = txData;
+                        const { id, recordDate, recordTime, ...payload } = txData;
                         payload.updatedAt = serverTimestamp();
+                        // 🌟 套用使用者自訂的日期與時間
+                        payload.date = recordDate || getLocalYYYYMMDD(ui.date);
+                        payload.month = payload.date.substring(0, 7);
+                        payload.recordTime = recordTime || getLocalHHmm(new Date());
+                        
                         Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
                         if(id) {
                           doAction(() => updateDoc(getDocRef('shared_ledger', id), payload), '修改成功'); 
                         } else {
-                          payload.date = getLocalYYYYMMDD(ui.date);
-                          payload.month = getLocalYYYYMM(ui.date);
                           payload.createdAt = serverTimestamp();
                           payload.createdBy = user ? user.uid : 'unknown';
                           doAction(() => addDoc(getCol('shared_ledger'), payload), '記帳成功'); 
@@ -1048,7 +1081,19 @@ export default function App() {
                     />
                   )}
                   {ui.modal === 'ai' && (
-                    <AIForm cats={CATEGORIES} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} onSave={(txData) => doAction(() => addDoc(getCol('shared_ledger'), {...txData, date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date), createdAt: serverTimestamp(), createdBy: user ? user.uid : 'unknown'}), 'AI 記帳成功')} showToast={showToast} t={t} ui={ui} />
+                    <AIForm 
+                      cats={CATEGORIES} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} 
+                      onSave={(txData) => {
+                        const { recordDate, recordTime, ...payload } = txData;
+                        payload.date = recordDate || getLocalYYYYMMDD(ui.date);
+                        payload.month = payload.date.substring(0, 7);
+                        payload.recordTime = recordTime || getLocalHHmm(new Date());
+                        payload.createdAt = serverTimestamp();
+                        payload.createdBy = user ? user.uid : 'unknown';
+                        doAction(() => addDoc(getCol('shared_ledger'), payload), 'AI 記帳成功');
+                      }} 
+                      showToast={showToast} t={t} ui={ui} 
+                    />
                   )}
                   {ui.modal === 'date' && (
                     <div className="grid grid-cols-3 gap-3">
@@ -1157,16 +1202,50 @@ export default function App() {
 // 4. 獨立子組件庫 (Forms & Modals)
 // ==========================================
 
-// 🌟 記帳表單 (視覺鎖定計算機 + 一鍵範本 + 折疊按鈕 + OCR 防呆 + 全自動付款人判斷)
+// 🌟 記帳表單 (完美 UI 版：藥丸切換器、日期時間自由輸入、平分邏輯)
 const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, t, ui }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, type: initialData?.type || 'expense', 
     category: initialData?.category || cats.expense[0]?.name || '餐飲', 
     accountId: initialData?.accountId || (accounts[0]?.id || ''), fromAccountId: initialData?.fromAccountId || (accounts[0]?.id || ''),
     toAccountId: initialData?.toAccountId || (accounts[1]?.id || ''), amount: initialData ? String(initialData.amount) : '', 
-    note: initialData?.note || '', tags: initialData?.tags || [] 
+    note: initialData?.note || '', tags: initialData?.tags || [],
+    recordDate: initialData?.date || getLocalYYYYMMDD(new Date()),
+    recordTime: initialData?.recordTime || getLocalHHmm(new Date())
   });
+
+  // 🌟 手寫/選取混合的日期輸入格式 (DD/MM/YYYY)
+  const [displayDate, setDisplayDate] = useState(() => {
+    const dStr = initialData?.date || getLocalYYYYMMDD(new Date());
+    const [y, m, d] = dStr.split('-');
+    return `${d}/${m}/${y}`;
+  });
+
+  const handleDateType = (e) => {
+    let val = e.target.value.replace(/\D/g, ''); 
+    if (val.length > 8) val = val.slice(0, 8);
+    let formatted = val;
+    if (val.length >= 5) formatted = `${val.slice(0,2)}/${val.slice(2,4)}/${val.slice(4)}`;
+    else if (val.length >= 3) formatted = `${val.slice(0,2)}/${val.slice(2)}`;
+    setDisplayDate(formatted);
+    if (val.length === 8) {
+      const d = val.slice(0,2); const m = val.slice(2,4); const y = val.slice(4);
+      setData(prev => ({...prev, recordDate: `${y}-${m}-${d}`}));
+    }
+  };
+
+  const handleDateSelect = (e) => {
+    const val = e.target.value;
+    setData(prev => ({...prev, recordDate: val}));
+    if (val) {
+      const [y, m, d] = val.split('-');
+      setDisplayDate(`${d}/${m}/${y}`);
+    }
+  };
   
+  // 所有帳戶皆可平分，預設為不平分 (false)
+  const [splitBill, setSplitBill] = useState(initialData ? (initialData.split !== 'none') : false);
+
   const [showK, setShowK] = useState(true);
   const [newTag, setNewTag] = useState('');
   const [isOCR, setIsOCR] = useState(false);
@@ -1200,7 +1279,8 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
     if (finalAmount > 0) {
       const acc = accounts.find(a => a.id === data.accountId);
       const autoPayer = acc ? acc.type : 'joint'; 
-      const autoSplit = autoPayer === 'joint' ? 'joint' : 'half';
+      let autoSplit = splitBill ? (autoPayer === 'joint' ? 'joint' : 'half') : 'none';
+
       onSave({...data, amount: finalAmount, payer: autoPayer, split: autoSplit}); 
     }
   };
@@ -1217,7 +1297,8 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
     if (name) {
       const acc = accounts.find(a => a.id === data.accountId);
       const autoPayer = acc ? acc.type : 'joint';
-      const autoSplit = autoPayer === 'joint' ? 'joint' : 'half';
+      let autoSplit = splitBill ? (autoPayer === 'joint' ? 'joint' : 'half') : 'none';
+
       onSaveTemplate({ name, txData: { ...data, amount: Number(evaluateMath(data.amount)), payer: autoPayer, split: autoSplit } });
     }
   };
@@ -1233,7 +1314,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       reader.onload = async () => {
         const base64Data = reader.result.split(',')[1];
         
-        // 🌟 嚴格套用 cURL 邏輯，使用 Header 傳送
+        // 🌟 嚴格套用 cURL 邏輯，使用 Header 傳送金鑰
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
         const options = {
           method: 'POST',
@@ -1303,19 +1384,19 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         </div>
         
         {data.type === 'transfer' ? (
-          <div className="flex gap-3 items-center">
-            <div className="flex-1 space-y-2">
-              <label className={`font-bold text-xs ${t.textM}`}>從</label>
-              <select value={data.fromAccountId} onChange={e => setData({...data, fromAccountId: e.target.value})} className={`w-full p-4 rounded-xl font-bold text-sm ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`}>
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+          <div className="flex flex-col gap-2">
+            <div className="space-y-1">
+              <label className={`font-bold text-xs ${t.textM} px-1`}>從 (轉出)</label>
+              <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1`}>
+                 {accounts.map(a => <button key={`from-${a.id}`} onClick={() => setData({...data, fromAccountId: a.id})} className={`shrink-0 px-4 py-2.5 font-bold text-sm rounded-xl transition-all ${data.fromAccountId === a.id ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>{a.name}</button>)}
+              </div>
             </div>
-            <ArrowRightLeft className={`w-5 h-5 mt-5 ${t.textM}`} />
-            <div className="flex-1 space-y-2">
-              <label className={`font-bold text-xs ${t.textM}`}>轉入</label>
-              <select value={data.toAccountId} onChange={e => setData({...data, toAccountId: e.target.value})} className={`w-full p-4 rounded-xl font-bold text-sm ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`}>
-                {accounts.filter(a => a.id !== data.fromAccountId).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+            <div className="flex justify-center -my-1"><ArrowDownIconSVG className={`w-5 h-5 ${t.textM}`} /></div>
+            <div className="space-y-1">
+              <label className={`font-bold text-xs ${t.textM} px-1`}>到 (轉入)</label>
+              <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1`}>
+                 {accounts.filter(a => a.id !== data.fromAccountId).map(a => <button key={`to-${a.id}`} onClick={() => setData({...data, toAccountId: a.id})} className={`shrink-0 px-4 py-2.5 font-bold text-sm rounded-xl transition-all ${data.toAccountId === a.id ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>{a.name}</button>)}
+              </div>
             </div>
           </div>
         ) : (
@@ -1330,13 +1411,37 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
 
         {data.type !== 'transfer' && (
           <div className="space-y-2">
-            <label className={`font-bold text-xs ${t.textM}`}>帳戶 (選擇從哪扣款，系統自動設定付款人)</label>
-            <select value={data.accountId} onChange={e => setData({...data, accountId: e.target.value})} className={`w-full p-4 rounded-xl ${t.bg} font-bold text-base border-none outline-none focus:ring-2 ${t.ring}`}>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            <label className={`font-bold text-xs ${t.textM} px-1`}>帳戶 (系統會自動判斷付款人)</label>
+            <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1`}>
+               {accounts.map(a => <button key={a.id} onClick={() => setData({...data, accountId: a.id})} className={`shrink-0 px-5 py-3 font-bold text-sm rounded-xl transition-all ${data.accountId === a.id ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>{a.name}</button>)}
+            </div>
+            {data.type === 'expense' && (
+              <div className={`flex justify-between items-center mt-3 px-2 py-1`}>
+                <span className={`text-sm font-bold ${t.text}`}>這筆花費要平分嗎？</span>
+                <ToggleSwitch checked={splitBill} onChange={setSplitBill} isDark={ui.isDark} />
+              </div>
+            )}
           </div>
         )}
         
+        {/* 🌟 日期與時間選擇器 (可打字 DD/MM/YYYY + 月曆) */}
+        <div className="flex gap-3">
+          <div className="flex-1 space-y-2">
+            <label className={`font-bold text-xs ${t.textM} px-1`}>日期 (DD/MM/YYYY)</label>
+            <div className="relative">
+              <input type="text" value={displayDate} onChange={handleDateType} placeholder="DD/MM/YYYY" maxLength={10} className={`w-full p-4 pr-12 rounded-xl ${t.bg} border-none font-bold text-sm outline-none focus:ring-2 ${t.ring}`} />
+              <div className="absolute right-0 top-0 bottom-0 w-12 flex items-center justify-center overflow-hidden">
+                <Calendar className={`w-5 h-5 ${t.textMuted}`} />
+                <input type="date" value={data.recordDate} onChange={handleDateSelect} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 space-y-2">
+            <label className={`font-bold text-xs ${t.textM} px-1`}>時間</label>
+            <input type="time" value={data.recordTime} onChange={e => setData({...data, recordTime: e.target.value})} className={`w-full p-4 rounded-xl ${t.bg} border-none font-bold text-sm outline-none focus:ring-2 ${t.ring}`} />
+          </div>
+        </div>
+
         {/* 🏷️ 標籤 (Tags) */}
         <div className="space-y-3">
           <div className="flex gap-3">
@@ -1367,7 +1472,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       {/* 折疊按鈕 */}
       <div className="flex justify-center -mb-4 relative z-10">
          <button onClick={() => setShowK(!showK)} className={`bg-white dark:bg-slate-800 border ${t.border} rounded-full p-1.5 shadow-sm text-stone-400 hover:text-indigo-500 transition-transform ${!showK ? 'rotate-180' : ''}`}>
-            <ChevronDown className="w-5 h-5" />
+            <Keyboard className="w-5 h-5" />
          </button>
       </div>
       
@@ -1419,7 +1524,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
 };
 
 // ==========================================
-// 🌟 AI 語音記帳表單 (嚴格套用 cURL Header 認證)
+// 🌟 AI 語音記帳表單
 // ==========================================
 const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
   const [text, setText] = useState(''); 
@@ -1456,7 +1561,6 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
     if (!text.trim()) return; 
     setLoading(true);
     try {
-       // 🌟 語音辨識嚴格套用 cURL 邏輯，使用 Header 傳送金鑰
        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
        const options = {
           method: 'POST', 
@@ -1479,11 +1583,12 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
        
        const acc = accounts.find(a => a.id === result.accountId) || accounts[0];
        const autoPayer = acc ? acc.type : 'joint';
-       const autoSplit = autoPayer === 'joint' ? 'joint' : 'half';
+       const autoSplit = 'none';
 
        onSave({ 
          amount: result.amount || 0, category: result.category || cats?.expense?.[0]?.name, type: result.type || 'expense', 
-         accountId: acc.id, payer: autoPayer, split: autoSplit, note: result.note || '', tags: ['AI記帳']
+         accountId: acc.id, payer: autoPayer, split: autoSplit, note: result.note || '', tags: ['AI記帳'],
+         recordDate: getLocalYYYYMMDD(new Date()), recordTime: getLocalHHmm(new Date())
        });
     } catch (e) { showToast(`AI 解析失敗: ${e.message}`, "error"); } finally { setLoading(false); }
   };
@@ -1510,6 +1615,50 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
 const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
   const [s, setS] = useState(settings);
   const isDark = t.bg.includes('0F172A') || t.bg.includes('1E1B18') || t.bg.includes('001f3f'); 
+
+  // 🌟 智慧外幣抓取邏輯
+  const handleAutoFetchRate = async () => {
+    const currencyMap = {
+      '日': 'JPY', 'jpy': 'JPY', '韓': 'KRW', 'krw': 'KRW',
+      '美': 'USD', 'usd': 'USD', '歐': 'EUR', 'eur': 'EUR',
+      '港': 'HKD', 'hkd': 'HKD', '泰': 'THB', 'thb': 'THB',
+      '英': 'GBP', 'gbp': 'GBP', '澳': 'AUD', 'aud': 'AUD',
+      '加': 'CAD', 'cad': 'CAD', '新': 'SGD', 'sgd': 'SGD',
+      '馬': 'MYR', 'myr': 'MYR', '越': 'VND', 'vnd': 'VND',
+      '印尼': 'IDR', 'idr': 'IDR', '人民幣': 'CNY', '中': 'CNY', 'cny': 'CNY', 'rmb': 'CNY'
+    };
+    
+    let targetCurrency = (s.travelCurrency || '').trim().toLowerCase();
+    
+    for (const [key, value] of Object.entries(currencyMap)) {
+      if (targetCurrency.includes(key)) {
+        targetCurrency = value;
+        break;
+      }
+    }
+    targetCurrency = targetCurrency.toUpperCase();
+    
+    if (targetCurrency.length !== 3) {
+      alert("請輸入正確的國家關鍵字或 3 碼幣別 (例如: 日本、泰國 或 JPY)");
+      return;
+    }
+    
+    setS({...s, travelCurrency: targetCurrency});
+
+    try {
+      const res = await fetch(`https://open.er-api.com/v6/latest/${targetCurrency}`);
+      const data = await res.json();
+      if (data.result === 'success' && data.rates.TWD) {
+        setS(prev => ({...prev, travelRate: Number(data.rates.TWD.toFixed(4))}));
+        alert(`成功抓取即時匯率！\n1 ${targetCurrency} = ${data.rates.TWD.toFixed(4)} TWD`);
+      } else {
+        alert("找不到該幣別匯率，請手動輸入");
+      }
+    } catch (e) {
+       alert("抓取匯率失敗，請檢查網路");
+    }
+  };
+
   return (
     <div className="space-y-4">
 
@@ -1528,7 +1677,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
          </div>
       </div>
 
-      {/* ✈️ 旅遊多幣別模式 */}
+      {/* ✈️ 旅遊多幣別模式 (含自動抓取) */}
       <div className={`${t.bg} rounded-3xl p-5 border ${t.border} shadow-sm space-y-4`}>
          <div className="flex justify-between items-center">
            <h4 className={`font-bold text-base flex items-center gap-2 ${s.travelMode ? 'text-[#0074D9]' : t.text}`}><Plane className="w-5 h-5"/> 旅遊模式 (多幣別)</h4>
@@ -1538,13 +1687,16 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
            <div className={`space-y-3 pt-3 border-t ${t.border}`}>
              <div className="flex justify-between items-center">
                <span className={`text-sm font-bold ${t.textM}`}>記帳幣別</span>
-               <input value={s.travelCurrency || 'JPY'} onChange={e => setS({...s, travelCurrency: e.target.value.toUpperCase()})} className={`w-20 ${t.cardInner} p-2 rounded-lg font-bold text-center border ${t.border} outline-none focus:ring-2 ${t.ring}`} placeholder="JPY" />
+               <div className="flex gap-2">
+                 <input value={s.travelCurrency || 'JPY'} onChange={e => setS({...s, travelCurrency: e.target.value})} className={`w-20 ${t.cardInner} p-2 rounded-lg font-bold text-center border ${t.border} outline-none focus:ring-2 ${t.ring}`} placeholder="日本" />
+                 <button onClick={handleAutoFetchRate} className={`px-3 py-2 rounded-lg text-xs font-bold text-white bg-[#0074D9] active:scale-95 shadow-sm`}>自動抓取</button>
+               </div>
              </div>
              <div className="flex justify-between items-center">
                <span className={`text-sm font-bold ${t.textM}`}>對台幣匯率</span>
                <input type="number" step="0.01" value={s.travelRate || 0.21} onChange={e => setS({...s, travelRate: Number(e.target.value)})} className={`w-24 ${t.cardInner} p-2 rounded-lg font-bold text-center border ${t.border} outline-none focus:ring-2 ${t.ring}`} />
              </div>
-             <p className={`text-xs ${t.textM}`}>開啟後，記帳時輸入的金額將自動乘上匯率轉為台幣。</p>
+             <p className={`text-[10px] ${t.textM}`}>輸入國家名或代碼(如:日本或JPY)，點擊自動抓取即時中價匯率。您也可以手動微調(如加上信用卡手續費)。</p>
            </div>
          )}
       </div>
@@ -1815,13 +1967,52 @@ const NoteForm = ({ data, onSave, onDelete, t }) => {
 };
 
 const EventForm = ({ onSave, t }) => {
-  const today = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
-  const [ti, setTi] = useState(''); const [d, setD] = useState(today);
+  const today = new Date();
+  const [ti, setTi] = useState(''); 
+  const [dateStr, setDateStr] = useState(getLocalYYYYMMDD(today));
+  const [displayDate, setDisplayDate] = useState(`${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`);
+  
+  const handleDateType = (e) => {
+    let val = e.target.value.replace(/\D/g, ''); 
+    if (val.length > 8) val = val.slice(0, 8);
+    let formatted = val;
+    if (val.length >= 5) formatted = `${val.slice(0,2)}/${val.slice(2,4)}/${val.slice(4)}`;
+    else if (val.length >= 3) formatted = `${val.slice(0,2)}/${val.slice(2)}`;
+    setDisplayDate(formatted);
+    if (val.length === 8) {
+      const d = val.slice(0,2); const m = val.slice(2,4); const y = val.slice(4);
+      setDateStr(`${y}-${m}-${d}`);
+    }
+  };
+
+  const handleDateSelect = (e) => {
+    const val = e.target.value;
+    setDateStr(val);
+    if (val) {
+      const [y, m, d] = val.split('-');
+      setDisplayDate(`${d}/${m}/${y}`);
+    }
+  };
+
   return (
     <div className="space-y-5">
-      <input value={ti} onChange={e => setTi(e.target.value)} placeholder="名稱 (例如: 結婚紀念日)" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} />
-      <input type="date" value={d} onChange={e => setD(e.target.value)} className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} />
-      <button onClick={() => onSave({title:ti, date:d, icon:'🎉'})} disabled={!ti || !d} className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md bg-pink-500/80 disabled:opacity-50 mt-2`}>新增日子</button>
+      <div className="space-y-2">
+        <label className={`block text-xs font-bold ${t.textM} px-1`}>名稱</label>
+        <input value={ti} onChange={e => setTi(e.target.value)} placeholder="名稱 (例如: 結婚紀念日)" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} />
+      </div>
+      
+      <div className="space-y-2">
+        <label className={`block text-xs font-bold ${t.textM} px-1`}>日期 (DD/MM/YYYY)</label>
+        <div className="relative">
+          <input type="text" value={displayDate} onChange={handleDateType} placeholder="DD/MM/YYYY" maxLength={10} className={`w-full p-4 pr-12 rounded-xl ${t.bg} border-none font-bold text-base outline-none focus:ring-2 ${t.ring}`} />
+          <div className="absolute right-0 top-0 bottom-0 w-12 flex items-center justify-center overflow-hidden">
+            <Calendar className={`w-5 h-5 ${t.textMuted}`} />
+            <input type="date" value={dateStr} onChange={handleDateSelect} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+          </div>
+        </div>
+      </div>
+      
+      <button onClick={() => onSave({title:ti, date:dateStr, icon:'🎉'})} disabled={!ti || !dateStr || displayDate.length !== 10} className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md bg-pink-500/80 disabled:opacity-50 mt-2`}>新增日子</button>
     </div>
   );
 };
