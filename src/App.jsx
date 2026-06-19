@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 
 // ==========================================
-// 1. 核心設定與資料庫初始化 (智慧路徑)
+// 1. 核心設定與資料庫初始化
 // ==========================================
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
   apiKey: "AIzaSyCegdtoILGfQEQqp7hzK5q--if0hViIOF8",
@@ -28,55 +28,41 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 🤖 您的專屬 Gemini API 金鑰已成功注入！
+// 🤖 您的專屬 Gemini API 金鑰
 const apiKey = "AQ.Ab8RN6KkNEr087TvY8JC6nO2KuZwPd6omWbk1AHNwREYoYNmjw"; 
 
-// 雙帳本分類設定
 const CATEGORIES = {
-  family: {
-    expense: [
-      { name: '餐飲', icon: '🍽️' }, { name: '購物', icon: '🛍️' }, { name: '交通', icon: '🚗' }, 
-      { name: '居家', icon: '🏠' }, { name: '娛樂', icon: '🍿' }, { name: '醫療', icon: '💊' }, 
-      { name: '教育', icon: '📚' }, { name: '其他', icon: '✨' }
-    ],
-    income: [ { name: '薪資', icon: '💰' }, { name: '投資', icon: '📈' }, { name: '獎金', icon: '🎁' }, { name: '其他', icon: '✨' } ]
-  },
-  studio: {
-    expense: [
-      { name: '軟體訂閱', icon: '💻' }, { name: '器材', icon: '📷' }, { name: '行銷廣告', icon: '📢' }, 
-      { name: '交通', icon: '🚗' }, { name: '進貨', icon: '📦' }, { name: '其他', icon: '✨' }
-    ],
-    income: [ { name: '品牌收入', icon: '💼' }, { name: '投資', icon: '📈' }, { name: '其他', icon: '✨' } ]
-  }
+  expense: [
+    { name: '餐飲', icon: '🍽️' }, { name: '購物', icon: '🛍️' }, { name: '交通', icon: '🚗' }, 
+    { name: '居家', icon: '🏠' }, { name: '娛樂', icon: '🍿' }, { name: '醫療', icon: '💊' }, 
+    { name: '教育', icon: '📚' }, { name: '其他', icon: '✨' }
+  ],
+  income: [ { name: '薪資', icon: '💰' }, { name: '投資', icon: '📈' }, { name: '獎金', icon: '🎁' }, { name: '其他', icon: '✨' } ]
 };
 
 const getLocalYYYYMM = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 const getLocalYYYYMMDD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const calculateDaysDiff = (target) => Math.ceil((new Date(target).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
 
-// 🔥 智慧雙帳本資料庫路徑設計
+// 🔥 智慧資料庫路徑設計
 const isCanvas = typeof __app_id !== 'undefined';
 const safeAppId = isCanvas ? String(__app_id) : ''; 
 
-const getCol = (workspace, colName) => {
-  const globalCols = ['shared_accounts', 'shared_settings', 'shared_tags', 'recurring_rules', 'shared_templates'];
-  const actualColName = globalCols.includes(colName) ? colName : `${workspace}_${colName}`;
+const getCol = (colName) => {
   return isCanvas 
-    ? collection(db, 'artifacts', safeAppId, 'public', 'data', actualColName)
-    : collection(db, actualColName);
+    ? collection(db, 'artifacts', safeAppId, 'public', 'data', String(colName))
+    : collection(db, String(colName)); 
 };
 
-const getDocRef = (workspace, colName, docId) => {
+const getDocRef = (colName, docId) => {
   if (!docId) throw new Error("無效的資料 ID");
-  const globalCols = ['shared_accounts', 'shared_settings', 'shared_tags', 'recurring_rules', 'shared_templates'];
-  const actualColName = globalCols.includes(colName) ? colName : `${workspace}_${colName}`;
   return isCanvas
-    ? doc(db, 'artifacts', safeAppId, 'public', 'data', actualColName, String(docId))
-    : doc(db, actualColName, String(docId));
+    ? doc(db, 'artifacts', safeAppId, 'public', 'data', String(colName), String(docId))
+    : doc(db, String(colName), String(docId)); 
 };
 
 // ==========================================
-// 🛡️ API 防護網 
+// 🛡️ API 防護網 (完美修復 AI 請求)
 // ==========================================
 const fetchWithBackoff = async (url, options, retries = 3) => {
   const delays = [1000, 2000, 4000];
@@ -127,7 +113,7 @@ export default function App() {
   
   const [ui, setUi] = useState({ 
     date: new Date(), tab: 'home', subTab: 'bills', statsView: 'month', modal: null, search: '', filterTags: [], 
-    workspace: 'family', isDark: true, confirm: null, selectedItem: null, toast: null, selectedTx: null 
+    isDark: true, confirm: null, selectedItem: null, toast: null, selectedTx: null 
   });
   
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
@@ -166,40 +152,30 @@ export default function App() {
     return onAuthStateChanged(auth, setUser);
   }, []);
 
-  // 監聽全域資料
   useEffect(() => {
     if (!user) return;
     const unsubs = [
-      onSnapshot(getCol(null, 'shared_accounts'), snap => {
+      onSnapshot(getCol('shared_accounts'), snap => {
         if (snap.empty) {
-          const defaults = [{ id: 'acc_joint', name: '共同帳戶', type: 'joint', icon: '🏦' }, { id: 'acc_h', name: '老公帳戶', type: 'husband', icon: '👨' }, { id: 'acc_w', name: '老婆帳戶', type: 'wife', icon: '👩' }, { id: 'acc_studio', name: '工作室', type: 'brand', icon: '💼' }];
-          defaults.forEach(d => setDoc(getDocRef(null, 'shared_accounts', d.id), { ...d, createdAt: serverTimestamp() }));
+          const defaults = [{ id: 'acc_joint', name: '共同帳戶', type: 'joint', icon: '🏦' }, { id: 'acc_h', name: '老公帳戶', type: 'husband', icon: '👨' }, { id: 'acc_w', name: '老婆帳戶', type: 'wife', icon: '👩' }];
+          defaults.forEach(d => setDoc(getDocRef('shared_accounts', d.id), { ...d, createdAt: serverTimestamp() }));
         } else {
           setData(prev => ({ ...prev, accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.createdAt?.toMillis() - b.createdAt?.toMillis()) }));
         }
       }),
-      onSnapshot(getDocRef(null, 'shared_settings', 'main'), doc => { if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() })); }),
-      onSnapshot(getDocRef(null, 'shared_tags', 'main'), doc => setData(prev => ({ ...prev, tags: doc.exists() ? doc.data().tags : [] }))),
-      onSnapshot(getCol(null, 'recurring_rules'), snap => setData(prev => ({ ...prev, recurringRules: snap.docs.map(d => ({ id: d.id, ...d.data() })) }))),
-      onSnapshot(getCol(null, 'shared_templates'), snap => setData(prev => ({ ...prev, templates: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) })))
+      onSnapshot(getDocRef('shared_settings', 'main'), doc => { if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() })); }),
+      onSnapshot(getDocRef('shared_tags', 'main'), doc => setData(prev => ({ ...prev, tags: doc.exists() ? doc.data().tags : [] }))),
+      onSnapshot(getCol('recurring_rules'), snap => setData(prev => ({ ...prev, recurringRules: snap.docs.map(d => ({ id: d.id, ...d.data() })) }))),
+      onSnapshot(getCol('shared_templates'), snap => setData(prev => ({ ...prev, templates: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))),
+      onSnapshot(getCol('shared_ledger'), snap => setData(p => ({ ...p, tx: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))),
+      onSnapshot(getCol('shared_bills'), snap => setData(p => ({ ...p, bills: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.dueDate - b.dueDate) }))),
+      onSnapshot(getCol('shared_notes'), snap => setData(p => ({ ...p, notes: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.updatedAt?.toMillis() - a.updatedAt?.toMillis()) }))),
+      onSnapshot(getCol('shared_shopping'), snap => setData(p => ({ ...p, shopping: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.completed === b.completed ? (b.createdAt?.toMillis() - a.createdAt?.toMillis()) : (a.completed ? 1 : -1)) }))),
+      onSnapshot(getCol('shared_goals'), snap => setData(p => ({ ...p, goals: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.createdAt?.toMillis() - b.createdAt?.toMillis()) }))),
+      onSnapshot(getCol('shared_events'), snap => setData(p => ({ ...p, events: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => calculateDaysDiff(a.date) - calculateDaysDiff(b.date)) })))
     ];
     return () => unsubs.forEach(u => u());
   }, [user]);
-
-  // 監聽工作區專屬資料
-  useEffect(() => {
-    if (!user) return;
-    const ws = ui.workspace;
-    const unsubs = [
-      onSnapshot(getCol(ws, 'shared_ledger'), snap => setData(p => ({ ...p, tx: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))),
-      onSnapshot(getCol(ws, 'shared_bills'), snap => setData(p => ({ ...p, bills: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.dueDate - b.dueDate) }))),
-      onSnapshot(getCol(ws, 'shared_notes'), snap => setData(p => ({ ...p, notes: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.updatedAt?.toMillis() - a.updatedAt?.toMillis()) }))),
-      onSnapshot(getCol(ws, 'shared_shopping'), snap => setData(p => ({ ...p, shopping: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.completed === b.completed ? (b.createdAt?.toMillis() - a.createdAt?.toMillis()) : (a.completed ? 1 : -1)) }))),
-      onSnapshot(getCol(ws, 'shared_goals'), snap => setData(p => ({ ...p, goals: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.createdAt?.toMillis() - b.createdAt?.toMillis()) }))),
-      onSnapshot(getCol(ws, 'shared_events'), snap => setData(p => ({ ...p, events: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => calculateDaysDiff(a.date) - calculateDaysDiff(b.date)) })))
-    ];
-    return () => unsubs.forEach(u => u());
-  }, [user, ui.workspace]);
 
   // 週期性記帳引擎
   useEffect(() => {
@@ -212,11 +188,11 @@ export default function App() {
         const dueDate = rule.nextDueDate.toDate(); dueDate.setHours(0, 0, 0, 0);
         if (dueDate <= today) {
           const newTx = { ...rule.txData, date: getLocalYYYYMMDD(dueDate), month: getLocalYYYYMM(dueDate), createdAt: serverTimestamp(), createdBy: user.uid, tags: [...(rule.txData.tags || []), '週期性'] };
-          await addDoc(getCol(rule.workspace, 'shared_ledger'), newTx);
+          await addDoc(getCol('shared_ledger'), newTx);
           const next = new Date(dueDate);
           if (rule.frequency === 'monthly') next.setMonth(next.getMonth() + rule.interval);
           else if (rule.frequency === 'weekly') next.setDate(next.getDate() + rule.interval * 7);
-          await updateDoc(getDocRef(null, 'recurring_rules', rule.id), { nextDueDate: next });
+          await updateDoc(getDocRef('recurring_rules', rule.id), { nextDueDate: next });
           processedCount++;
         }
       }
@@ -251,12 +227,12 @@ export default function App() {
   const tStats = calcStats(ui.statsView === 'month' ? mTx : yTx);
 
   const rollover = useMemo(() => {
-    if (!settings.enableRollover || ui.workspace === 'studio') return { enabled: false, amt: 0, budget: settings.monthlyBudget };
+    if (!settings.enableRollover) return { enabled: false, amt: 0, budget: settings.monthlyBudget };
     const pMonth = getLocalYYYYMM(new Date(ui.date.getFullYear(), ui.date.getMonth() - 1, 1));
     const pExp = data.tx.filter(t => t.month === pMonth && t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
     const amt = (pExp < settings.monthlyBudget && pExp > 0) ? settings.monthlyBudget - pExp : 0;
     return { enabled: true, amt, budget: settings.monthlyBudget + amt };
-  }, [settings, ui.date, data.tx, ui.workspace]);
+  }, [settings, ui.date, data.tx]);
 
   const accBal = data.accounts.reduce((acc, a) => {
     const balance = data.tx.reduce((sum, t) => {
@@ -282,21 +258,21 @@ export default function App() {
   // 🔔 系統通知
   const rawAlerts = useMemo(() => {
     const a = []; const today = new Date().getDate(); const notifyDays = settings.notifyAdvanceDays || 3;
-    if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期`, time: '系統' }); });
-    if (settings.notifyEvents) data.events.forEach(e => { const d = calculateDaysDiff(e.date); if (d >= 0 && d <= notifyDays) a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天`, time: '系統' }); });
-    if (settings.notifyLargeExpense) data.tx.slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}`, time: t.date }); });
+    if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期` }); });
+    if (settings.notifyEvents) data.events.forEach(e => { const d = calculateDaysDiff(e.date); if (d >= 0 && d <= notifyDays) a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天` }); });
+    if (settings.notifyLargeExpense) mTx.slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}` }); });
     return a;
-  }, [data, settings]);
+  }, [data, settings, mTx]);
 
   const activeAlerts = rawAlerts.filter(a => !dismissedAlerts.includes(a.id));
 
   const pieChartData = useMemo(() => {
     const total = tStats.exp || 1;
     return Object.entries(tStats.cat).map(([name, value]) => {
-      const icon = CATEGORIES[ui.workspace].expense.find(c => c.name === name)?.icon || '✨';
+      const icon = CATEGORIES.expense.find(c => c.name === name)?.icon || '✨';
       return { name, value, percentage: Math.round((value / total) * 100), color: '#b45309', icon };
     }).sort((a, b) => b.value - a.value);
-  }, [tStats, ui.workspace]);
+  }, [tStats]);
 
   // ==========================================
   // 🛡️ Firebase 操作防護網
@@ -325,7 +301,7 @@ export default function App() {
 
   const handleAddGlobalTag = async (tagName) => {
     if (!tagName.trim() || data.tags.includes(tagName)) return;
-    try { await setDoc(getDocRef(null, 'shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {}
+    try { await setDoc(getDocRef('shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {}
   };
 
   // 🤖 AI 顧問呼叫 (完美使用 API Key 放置於 URL 避免 CORS 預檢問題)
@@ -338,9 +314,9 @@ export default function App() {
     try {
       const topCats = pieChartData.slice(0, 3).map(c => `${c.name}(${c.percentage}%)`).join('、');
       let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老公需給老婆${Math.round(settlement.amt)}` : `老婆需給老公${Math.round(settlement.amt)}`);
-      const prompt = `這是${ui.workspace==='family'?'家庭':'工作室'}帳本本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
+      const prompt = `這是家庭帳本本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
       
-      // 🌟 解決 401: 使用 gemini-1.5-flash，並把 key 放網址。不要用 X-goog-api-key 避免瀏覽器 CORS 被擋。
+      // 🌟 解決 401: 使用 gemini-1.5-flash，並把 key 放網址。不用 X-goog-api-key 避免瀏覽器 CORS 阻擋。
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
       const options = {
         method: 'POST',
@@ -364,20 +340,20 @@ export default function App() {
   const handleExportToSheets = () => {
     if (data.tx.length === 0) return showToast("目前沒有資料可以匯出喔！", "error"); 
     const BOM = "\uFEFF"; 
-    const headers = ['日期', '工作區', '類型', '分類/轉出', '帳戶/轉入', '金額', '備註', '付款人', '標籤'];
+    const headers = ['日期', '類型', '分類/轉出', '帳戶/轉入', '金額', '備註', '付款人', '標籤'];
     const rows = data.tx.map(tx => {
       const typeLabel = tx.type === 'expense' ? '支出' : tx.type === 'income' ? '收入' : '轉帳';
       const catOrFrom = tx.type === 'transfer' ? data.accounts.find(a => a.id === tx.fromAccountId)?.name : tx.category;
       const accOrTo = tx.type === 'transfer' ? data.accounts.find(a => a.id === tx.toAccountId)?.name : data.accounts.find(a => a.id === tx.accountId)?.name;
       const payerLabel = tx.payer === 'husband' ? '老公' : tx.payer === 'wife' ? '老婆' : '共同';
-      return [tx.date, ui.workspace === 'family' ? '家庭' : '工作室', typeLabel, catOrFrom || '', accOrTo || '', tx.amount, `"${tx.note || ''}"`, payerLabel, tx.tags ? `"${tx.tags.join(';')}"` : ''].join(",");
+      return [tx.date, typeLabel, catOrFrom || '', accOrTo || '', tx.amount, `"${tx.note || ''}"`, payerLabel, tx.tags ? `"${tx.tags.join(';')}"` : ''].join(",");
     });
     
     const csvContent = BOM + headers.join(",") + "\n" + rows.join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob); 
     const link = document.createElement('a'); 
-    link.href = url; link.setAttribute('download', `HomeLedger_${ui.workspace}_${getLocalYYYYMMDD(new Date())}.csv`);
+    link.href = url; link.setAttribute('download', `HomeLedger_${getLocalYYYYMMDD(new Date())}.csv`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link); 
     showToast("匯出成功！請直接匯入 Google Sheets");
   };
@@ -456,10 +432,8 @@ export default function App() {
                </button>
             </div>
             
-            {/* 雙帳本切換開關 */}
-            <div className={`flex ${t.bg} p-1.5 rounded-full border ${t.border} shadow-sm`}>
-               <button onClick={() => updateUi({ workspace: 'family' })} className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${ui.workspace === 'family' ? `${t.text} ${t.cardInner} shadow-sm` : t.textM}`}>家庭</button>
-               <button onClick={() => updateUi({ workspace: 'studio' })} className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${ui.workspace === 'studio' ? `${t.text} ${t.cardInner} shadow-sm` : t.textM}`}>工作室</button>
+            <div className="flex-1 text-center">
+              <h1 className="text-2xl font-black tracking-wide flex items-center justify-center gap-1.5">Home Ledger <span className="text-rose-500">♡</span></h1>
             </div>
 
             <div className="flex gap-3 w-24 justify-end relative">
@@ -491,7 +465,7 @@ export default function App() {
                     <h2 className="text-[5rem] leading-none font-black tracking-tighter">{hStats.exp.toLocaleString()}</h2>
                   </div>
                   
-                  {rollover.enabled && ui.workspace === 'family' && (
+                  {rollover.enabled && (
                     <div className={`mt-6 pt-5 border-t ${t.border}`}>
                        <div className="flex items-center gap-2 mb-3">
                          <Sparkles className={`w-5 h-5 text-rose-500`} />
@@ -534,7 +508,7 @@ export default function App() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-5 truncate">
                           <div className={`w-16 h-16 rounded-full ${t.bg} flex items-center justify-center text-3xl shrink-0`}>
-                            {tx.type === 'transfer' ? <ArrowRightLeft className="w-6 h-6 text-stone-500" /> : CATEGORIES[ui.workspace].expense.find(c=>c.name===tx.category)?.icon || CATEGORIES[ui.workspace].income.find(c=>c.name===tx.category)?.icon || '📝'}
+                            {tx.type === 'transfer' ? <ArrowRightLeft className="w-6 h-6 text-stone-500" /> : CATEGORIES.expense.find(c=>c.name===tx.category)?.icon || CATEGORIES.income.find(c=>c.name===tx.category)?.icon || '📝'}
                           </div>
                           <div className="truncate">
                             <p className="font-extrabold text-xl truncate mb-1">
@@ -567,7 +541,7 @@ export default function App() {
                         <button onClick={() => updateUi({ modal: 'tx', selectedTx: tx })} className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold ${t.bg} ${t.textM} hover:${t.primaryText} active:scale-95 transition-colors`}>
                           <Edit3 className="w-4 h-4" /> 修改
                         </button>
-                        <button onClick={() => confirmDel('確定要刪除這筆紀錄嗎？', () => deleteDoc(getDocRef(ui.workspace, 'shared_ledger', tx.id)))} className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold ${ui.isDark ? 'bg-red-900/20' : 'bg-red-50'} text-red-500 active:scale-95 transition-colors`}>
+                        <button onClick={() => confirmDel('確定要刪除這筆紀錄嗎？', () => deleteDoc(getDocRef('shared_ledger', tx.id)))} className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold ${ui.isDark ? 'bg-red-900/20' : 'bg-red-50'} text-red-500 active:scale-95 transition-colors`}>
                           <Trash2 className="w-4 h-4" /> 刪除
                         </button>
                       </div>
@@ -592,7 +566,7 @@ export default function App() {
                         <span className="font-bold text-lg truncate">{a.name}</span>
                       </div>
                       <div className="text-3xl font-black">${(accBal[a.id] || 0).toLocaleString()}</div>
-                      <Trash2 onClick={() => confirmDel('刪除帳戶？', () => deleteDoc(getDocRef(null, 'shared_accounts', a.id)))} className={`w-5 h-5 ${t.textM} absolute top-6 right-6 cursor-pointer hover:text-red-500`} />
+                      <Trash2 onClick={() => confirmDel('刪除帳戶？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} className={`w-5 h-5 ${t.textM} absolute top-6 right-6 cursor-pointer hover:text-red-500`} />
                     </div>
                   ))}
                   <div onClick={() => updateUi({ modal: 'account' })} className={`bg-transparent border-2 border-dashed ${t.border} rounded-3xl p-6 flex flex-col items-center justify-center ${t.textM} cursor-pointer min-h-[160px] hover:border-[#D97706] transition-colors active:scale-95`}>
@@ -632,11 +606,11 @@ export default function App() {
                       </div>
                       
                       <div className="flex flex-col items-center flex-1 px-2 relative">
-                        <span className={`text-xs ${t.textM} font-bold mb-2`}>應支付給</span>
+                        <span className={`text-xs ${t.textM} font-bold mb-2`}>應轉帳給</span>
                         <div className="flex items-center justify-center w-full text-rose-500">
-                          {settlement.who === 'wife' && <ChevronLeft className="w-6 h-6 mr-1" strokeWidth={3} />}
+                          {settlement.who === 'wife' && <ChevronLeft className="w-6 h-6 mr-1 opacity-80" />}
                           <span className="text-2xl font-black mx-1">${Math.round(settlement.amt).toLocaleString()}</span>
-                          {settlement.who === 'husband' && <ChevronRight className="w-6 h-6 ml-1" strokeWidth={3} />}
+                          {settlement.who === 'husband' && <ChevronRight className="w-6 h-6 ml-1 opacity-80" />}
                         </div>
                       </div>
 
@@ -723,11 +697,11 @@ export default function App() {
                         <div className="flex gap-3 items-center">
                           <span className="font-black text-2xl">${b.amount}</span>
                           {!b.isPaid && (
-                            <button onClick={() => doAction(() => updateDoc(getDocRef(ui.workspace, 'shared_bills', b.id), {isPaid: true}), "已繳款")} className={`p-2.5 rounded-full ${t.primary} text-white shadow-sm`}>
+                            <button onClick={() => doAction(() => updateDoc(getDocRef('shared_bills', b.id), {isPaid: true}), "已繳款")} className={`p-2.5 rounded-full ${t.primary} text-white shadow-sm`}>
                               <Check className="w-5 h-5"/>
                             </button>
                           )}
-                          <Trash2 onClick={() => confirmDel('刪除帳單？', () => deleteDoc(getDocRef(ui.workspace, 'shared_bills', b.id)))} className={`w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer`}/>
+                          <Trash2 onClick={() => confirmDel('刪除帳單？', () => deleteDoc(getDocRef('shared_bills', b.id)))} className={`w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer`}/>
                         </div>
                       </div>
                     ))}
@@ -736,7 +710,7 @@ export default function App() {
                 
                 {ui.subTab === 'shopping' && (
                   <div className="space-y-4">
-                    <form onSubmit={e => { e.preventDefault(); const v = e.target.item.value.trim(); if(v) doAction(() => addDoc(getCol(ui.workspace, 'shared_shopping'), {text: v, completed: false, createdAt: serverTimestamp()})); e.target.reset(); }} className="flex gap-3 mb-6">
+                    <form onSubmit={e => { e.preventDefault(); const v = e.target.item.value.trim(); if(v) doAction(() => addDoc(getCol('shared_shopping'), {text: v, completed: false, createdAt: serverTimestamp()})); e.target.reset(); }} className="flex gap-3 mb-6">
                       <input name="item" placeholder="新增待買物品..." className={`flex-1 px-5 py-4 rounded-2xl border ${t.border} ${t.cardInner} font-bold text-base shadow-sm focus:outline-none focus:ring-2 ${t.ring}`}/>
                       <button type="submit" className={`px-6 rounded-2xl ${t.primary} text-white shadow-sm`}><Plus className="w-6 h-6"/></button>
                     </form>
@@ -745,11 +719,11 @@ export default function App() {
                       <div className={`py-16 text-center text-sm font-bold ${t.textM} ${t.cardInner} rounded-3xl border ${t.border} shadow-sm`}>購物清單空空如也！</div>
                     ) : data.shopping.map(s => (
                       <div key={s.id} className={`p-5 rounded-2xl flex justify-between items-center border ${t.border} ${t.cardInner} shadow-sm`}>
-                        <div className="flex gap-3 items-center flex-1 cursor-pointer" onClick={() => updateDoc(getDocRef(ui.workspace, 'shared_shopping', s.id), {completed: !s.completed})}>
+                        <div className="flex gap-3 items-center flex-1 cursor-pointer" onClick={() => updateDoc(getDocRef('shared_shopping', s.id), {completed: !s.completed})}>
                           <CheckCircle2 className={`w-6 h-6 ${s.completed ? 'text-emerald-500' : t.textM}`}/>
                           <span className={`font-bold text-base ${s.completed ? 'line-through opacity-50' : ''}`}>{s.text}</span>
                         </div>
-                        <Trash2 onClick={() => confirmDel('刪除物品？', () => deleteDoc(getDocRef(ui.workspace, 'shared_shopping', s.id)))} className={`w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer`}/>
+                        <Trash2 onClick={() => confirmDel('刪除物品？', () => deleteDoc(getDocRef('shared_shopping', s.id)))} className={`w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer`}/>
                       </div>
                     ))}
                   </div>
@@ -804,7 +778,7 @@ export default function App() {
                           </div>
                           <div className="flex items-center gap-4">
                             <span className="font-black text-2xl text-pink-500">{d === 0 ? '今天' : d}</span>
-                            <Trash2 onClick={() => confirmDel('刪除日子？', () => deleteDoc(getDocRef(ui.workspace, 'shared_events', e.id)))} className={`w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer`}/>
+                            <Trash2 onClick={() => confirmDel('刪除日子？', () => deleteDoc(getDocRef('shared_events', e.id)))} className={`w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer`}/>
                           </div>
                         </div>
                       )
@@ -845,7 +819,7 @@ export default function App() {
                             <Coins className={`w-5 h-5 ${t.primaryText}`} /> 存入資金
                           </button>
                         )}
-                        <Trash2 onClick={() => confirmDel('刪除目標？', () => deleteDoc(getDocRef(ui.workspace, 'shared_goals', g.id)))} className={`absolute top-7 right-6 w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer z-10`}/>
+                        <Trash2 onClick={() => confirmDel('刪除目標？', () => deleteDoc(getDocRef('shared_goals', g.id)))} className={`absolute top-7 right-6 w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer z-10`}/>
                       </div>
                     )
                   })}
@@ -909,29 +883,31 @@ export default function App() {
                 {/* 彈窗渲染 */}
                 {ui.modal === 'tx' && (
                   <TxForm 
-                    accounts={data.accounts} cats={CATEGORIES[ui.workspace]} tags={data.tags} initialData={ui.selectedTx} 
-                    templates={data.templates.filter(t => t.workspace === ui.workspace)}
+                    accounts={data.accounts} cats={CATEGORIES.family} tags={data.tags} initialData={ui.selectedTx} templates={data.templates}
                     onAI={() => updateUi({ modal: 'ai' })} onAddTag={handleAddGlobalTag}
-                    onSaveTemplate={(tpl) => doAction(() => addDoc(getCol(null, 'shared_templates'), {...tpl, workspace: ui.workspace, createdAt: serverTimestamp()}), '範本已儲存')}
-                    onDeleteTemplate={(id) => doAction(() => deleteDoc(getDocRef(null, 'shared_templates', id)), '範本已移除')}
+                    onSaveTemplate={(tpl) => doAction(() => addDoc(getCol('shared_templates'), {...tpl, createdAt: serverTimestamp()}), '範本已儲存')}
+                    onDeleteTemplate={(id) => doAction(() => deleteDoc(getDocRef('shared_templates', id)), '範本已移除')}
                     onSave={(txData) => { 
                       const { id, ...payload } = txData;
                       payload.updatedAt = serverTimestamp();
+                      
                       Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
-                      if(id) doAction(() => updateDoc(getDocRef(ui.workspace, 'shared_ledger', id), payload), '修改成功'); 
-                      else {
+
+                      if(id) {
+                        doAction(() => updateDoc(getDocRef('shared_ledger', id), payload), '修改成功'); 
+                      } else {
                         payload.date = getLocalYYYYMMDD(ui.date);
                         payload.month = getLocalYYYYMM(ui.date);
                         payload.createdAt = serverTimestamp();
                         payload.createdBy = user ? user.uid : 'unknown';
-                        doAction(() => addDoc(getCol(ui.workspace, 'shared_ledger'), payload), '記帳成功'); 
+                        doAction(() => addDoc(getCol('shared_ledger'), payload), '記帳成功'); 
                       }
                     }} 
                     t={t} ui={ui}
                   />
                 )}
                 {ui.modal === 'ai' && (
-                  <AIForm cats={CATEGORIES[ui.workspace]} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} onSave={(txData) => doAction(() => addDoc(getCol(ui.workspace, 'shared_ledger'), {...txData, date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date), createdAt: serverTimestamp(), createdBy: user ? user.uid : 'unknown'}), 'AI 記帳成功')} showToast={showToast} t={t} ui={ui} />
+                  <AIForm cats={CATEGORIES.family} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} onSave={(txData) => doAction(() => addDoc(getCol('shared_ledger'), {...txData, date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date), createdAt: serverTimestamp(), createdBy: user ? user.uid : 'unknown'}), 'AI 記帳成功')} showToast={showToast} t={t} ui={ui} />
                 )}
                 {ui.modal === 'date' && (
                   <div className="grid grid-cols-3 gap-3">
@@ -943,21 +919,21 @@ export default function App() {
                   </div>
                 )}
                 {ui.modal === 'settings' && (
-                  <SettingsForm settings={settings} onSave={(s) => doAction(() => setDoc(getDocRef(null, 'shared_settings', 'main'), s, {merge:true}), '設定已儲存')} onExport={handleExportToSheets} onRecurring={() => updateUi({ modal: 'recurring' })} t={t} />
+                  <SettingsForm settings={settings} onSave={(s) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), s, {merge:true}), '設定已儲存')} onExport={handleExportToSheets} onRecurring={() => updateUi({ modal: 'recurring' })} t={t} />
                 )}
                 {ui.modal === 'recurring' && (
                   <RecurringForm 
                     rules={data.recurringRules} accounts={data.accounts} cats={CATEGORIES} 
-                    onSave={r => doAction(() => addDoc(getCol(null, 'recurring_rules'), r), '自動記帳規則已建立')} 
-                    onDelete={id => confirmDel('刪除此規則？', () => deleteDoc(getDocRef(null, 'recurring_rules', id)))} 
+                    onSave={r => doAction(() => addDoc(getCol('recurring_rules'), r), '自動記帳規則已建立')} 
+                    onDelete={id => confirmDel('刪除此規則？', () => deleteDoc(getDocRef('recurring_rules', id)))} 
                     t={t} 
                   />
                 )}
                 {ui.modal === 'barcode' && (
-                  <BarcodeForm codes={{h:settings.husbandBarcode, hC:settings.husbandCert, w:settings.wifeBarcode, wC:settings.wifeCert}} onSave={(h,hC,w,wC) => doAction(() => setDoc(getDocRef(null, 'shared_settings', 'main'), {husbandBarcode:h, husbandCert:hC, wifeBarcode:w, wifeCert:wC}, {merge:true}), '載具已儲存')} t={t} />
+                  <BarcodeForm codes={{h:settings.husbandBarcode, hC:settings.husbandCert, w:settings.wifeBarcode, wC:settings.wifeCert}} onSave={(h,hC,w,wC) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), {husbandBarcode:h, husbandCert:hC, wifeBarcode:w, wifeCert:wC}, {merge:true}), '載具已儲存')} t={t} />
                 )}
                 
-                {/* 🌟 推播與通知面板 */}
+                {/* 🌟 完美的推播與通知面板 (新增消掉按鈕 X) */}
                 {ui.modal === 'notify' && (
                   <div className="space-y-4">
                     {activeAlerts.length === 0 ? (
@@ -974,7 +950,7 @@ export default function App() {
                           <h4 className="font-extrabold text-lg mb-1">{a.title}</h4>
                           <p className={`text-sm font-bold ${t.textM}`}>{a.desc}</p>
                         </div>
-                        {/* 單獨關閉該通知的按鈕 */}
+                        {/* 🌟 單獨關閉該通知的按鈕 */}
                         <button 
                           onClick={() => setDismissedAlerts(prev => [...prev, a.id])} 
                           className={`absolute top-5 right-5 text-stone-400 hover:text-rose-500 active:scale-95 transition-colors`}
@@ -987,10 +963,10 @@ export default function App() {
                 )}
                 
                 {ui.modal === 'account' && (
-                  <AccForm onSave={d => doAction(() => addDoc(getCol(null, 'shared_accounts'), {...d, createdAt: serverTimestamp()}), '帳戶建立')} t={t} />
+                  <AccForm onSave={d => doAction(() => addDoc(getCol('shared_accounts'), {...d, createdAt: serverTimestamp()}), '帳戶建立')} t={t} />
                 )}
                 {ui.modal === 'bill' && (
-                  <BillForm onSave={d => doAction(() => addDoc(getCol(ui.workspace, 'shared_bills'), {...d, isPaid: false, createdAt: serverTimestamp()}), '帳單建立')} t={t} />
+                  <BillForm onSave={d => doAction(() => addDoc(getCol('shared_bills'), {...d, isPaid: false, createdAt: serverTimestamp()}), '帳單建立')} t={t} />
                 )}
                 {ui.modal === 'note' && (
                   <NoteForm 
@@ -998,22 +974,29 @@ export default function App() {
                     onSave={d => {
                       const { id, ...payload } = d;
                       payload.updatedAt = serverTimestamp();
+                      
+                      // 🛡️ 防護：過濾掉 undefined
                       Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
-                      if (id) doAction(() => updateDoc(getDocRef(ui.workspace, 'shared_notes', id), payload), '修改成功');
-                      else { payload.createdAt = serverTimestamp(); doAction(() => addDoc(getCol(ui.workspace, 'shared_notes'), payload), '新增成功'); }
+                      
+                      if (id) {
+                        doAction(() => updateDoc(getDocRef('shared_notes', id), payload), '修改成功');
+                      } else {
+                        payload.createdAt = serverTimestamp();
+                        doAction(() => addDoc(getCol('shared_notes'), payload), '新增成功');
+                      }
                     }} 
-                    onDelete={id => confirmDel('刪除筆記？', () => deleteDoc(getDocRef(ui.workspace, 'shared_notes', id)))} 
+                    onDelete={id => confirmDel('刪除筆記？', () => deleteDoc(getDocRef('shared_notes', id)))} 
                     t={t} 
                   />
                 )}
                 {ui.modal === 'event' && (
-                  <EventForm onSave={d => doAction(() => addDoc(getCol(ui.workspace, 'shared_events'), {...d, createdAt: serverTimestamp()}), '建立成功')} t={t} />
+                  <EventForm onSave={d => doAction(() => addDoc(getCol('shared_events'), {...d, createdAt: serverTimestamp()}), '建立成功')} t={t} />
                 )}
                 {ui.modal === 'goal' && (
-                  <GoalForm onSave={d => doAction(() => addDoc(getCol(ui.workspace, 'shared_goals'), {...d, currentAmount: 0, createdAt: serverTimestamp()}), '目標建立')} t={t} />
+                  <GoalForm onSave={d => doAction(() => addDoc(getCol('shared_goals'), {...d, currentAmount: 0, createdAt: serverTimestamp()}), '目標建立')} t={t} />
                 )}
                 {ui.modal === 'fund' && (
-                  <FundForm goal={ui.selectedItem} onSave={amt => doAction(() => updateDoc(getDocRef(ui.workspace, 'shared_goals', ui.selectedItem.id), {currentAmount: ui.selectedItem.currentAmount + amt}), '存入成功')} t={t} />
+                  <FundForm goal={ui.selectedItem} onSave={amt => doAction(() => updateDoc(getDocRef('shared_goals', ui.selectedItem.id), {currentAmount: ui.selectedItem.currentAmount + amt}), '存入成功')} t={t} />
                 )}
                 {ui.modal === 'tags' && (
                   <div className="space-y-5">
@@ -1040,7 +1023,7 @@ export default function App() {
 // 4. 獨立子組件庫 (Forms & Modals)
 // ==========================================
 
-// 🌟 記帳表單 (含真四則運算 4x4 計算機 與 一鍵範本)
+// 🌟 記帳表單 (完美防呆佈局 + 一鍵範本)
 const TxForm = ({ accounts, cats, tags, initialData, templates, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, t, ui }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, type: initialData?.type || 'expense', category: initialData?.category || cats.expense[0].name, 
@@ -1051,7 +1034,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, onAI, onAddTag, 
   
   const [newTag, setNewTag] = useState('');
   
-  // 🧮 支援四則運算的防呆計算邏輯
   const evaluateMath = (str) => {
     try {
       if (!str) return '';
@@ -1065,7 +1047,11 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, onAI, onAddTag, 
   };
 
   const handleKey = (k) => {
-    if (k === '=') setData({...data, amount: evaluateMath(data.amount)});
+    if (k === 'OK') {
+      const finalAmt = evaluateMath(data.amount);
+      setData({...data, amount: finalAmt});
+    } 
+    else if (k === '=') setData({...data, amount: evaluateMath(data.amount)});
     else if (k === 'C') setData({...data, amount: ''});
     else if (k === '⌫') setData({...data, amount: data.amount.slice(0, -1)});
     else setData({...data, amount: data.amount + k});
@@ -1092,13 +1078,14 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, onAI, onAddTag, 
 
   return (
     <div className="flex flex-col h-[75vh]">
-      {/* 上半部：可滾動的設定區 */}
-      <div className="flex-1 overflow-y-auto space-y-5 hide-scrollbar pb-4 px-1">
+      
+      {/* 🌟 上半部：可滾動的設定區 */}
+      <div className="flex-1 overflow-y-auto space-y-4 px-1 pb-4 hide-scrollbar">
         
-        {/* 🌟 一鍵記帳範本區 (可橫向捲動) */}
-        <div className="flex gap-2 overflow-x-auto hide-scrollbar py-1">
-          {templates.map(tpl => (
-            <div key={tpl.id} className={`relative flex items-center shrink-0 ${t.bg} border ${t.border} rounded-xl pl-3 pr-8 py-2 shadow-sm`}>
+        {/* 一鍵記帳範本區 (可橫向捲動) */}
+        <div className="flex gap-2 overflow-x-auto hide-scrollbar py-1 mb-2">
+          {templates && templates.map(tpl => (
+            <div key={tpl.id} className={`relative flex items-center shrink-0 ${t.bg} border ${t.border} rounded-xl pl-3 pr-8 py-2 shadow-sm group`}>
                <span 
                  onClick={() => setData({ ...data, ...tpl.txData, amount: String(tpl.txData.amount) })} 
                  className={`font-bold text-sm cursor-pointer ${t.text}`}
@@ -1184,7 +1171,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, onAI, onAddTag, 
         {/* 📷 備註與相機 */}
         <div className="flex gap-3">
           <input type="text" placeholder="備註..." value={data.note} onChange={e => setData({...data, note: e.target.value})} className={`flex-1 p-4 rounded-xl ${t.bg} border-none font-bold text-base outline-none focus:ring-2 ${t.ring}`} />
-          <button className={`p-4 rounded-xl font-bold flex items-center justify-center active:scale-95 ${t.bg} border-none ${t.textM}`} onClick={() => alert("相機辨識功能即將推出！")}><Camera className="w-6 h-6" /></button>
+          <button className={`p-4 rounded-xl font-bold flex items-center justify-center active:scale-95 ${t.bg} border-none ${t.textM}`} onClick={() => alert("相機上傳功能即將推出！")}><Camera className="w-6 h-6" /></button>
         </div>
         
         {data.type !== 'transfer' && (
@@ -1200,15 +1187,16 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, onAI, onAddTag, 
       </div>
       
       {/* 🌟 下半部：永久鎖定在底部的「大金額顯示 + 4x4 計算機」 */}
-      <div className={`shrink-0 pt-4 border-t ${t.border} bg-transparent`}>
+      <div className={`shrink-0 border-t ${t.border} pt-3 pb-safe bg-transparent shadow-[0_-4px_10px_rgba(0,0,0,0.02)]`}>
+        
         {/* 金額顯示鎖定在這裡，打字不怕看不到！ */}
-        <div className="flex justify-between items-center px-2 mb-3">
-          <span className={`font-bold text-sm ${t.textM}`}>金額</span>
-          <span className="text-4xl font-black">${data.amount || '0'}</span>
+        <div className={`flex justify-between items-center px-4 py-3 mx-2 mb-3 rounded-2xl ${ui.isDark ? 'bg-[#1E293B] shadow-inner' : 'bg-stone-50 border border-stone-200'}`}>
+          <span className={`font-bold text-sm ${t.textM}`}>輸入金額</span>
+          <span className={`text-4xl font-black ${t.text} truncate max-w-[200px] text-right`}>{data.amount || '0'}</span>
         </div>
 
-        {/* 4x4 計算機陣列 */}
-        <div className={`grid grid-cols-4 gap-2`}>
+        {/* 4x4 真四則運算計算機陣列 */}
+        <div className={`grid grid-cols-4 gap-2 px-2 pb-2`}>
           {['7','8','9','÷', '4','5','6','×', '1','2','3','-', 'C','0','.','+', '⌫','00','=','OK'].map((k, i) => {
             const isOp = ['÷','×','-','+','='].includes(k);
             const isC = k === 'C' || k === '⌫';
@@ -1237,7 +1225,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, onAI, onAddTag, 
 };
 
 // ==========================================
-// 🌟 AI 語音記帳表單 (完美套用 URL Param 邏輯，避免 401 CORS 錯誤)
+// 🌟 AI 語音記帳表單 (完美修復 401 問題)
 // ==========================================
 const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
   const [text, setText] = useState(''); 
@@ -1274,13 +1262,13 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
     if (!text.trim()) return; 
     setLoading(true);
     try {
-       // 🌟 解決 401 錯誤: 將 Key 放在 URL 參數中，不要放在 Header
+       // 🌟 解決 401 CORS 錯誤：絕對不把 Key 放 Header！
        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
        const options = {
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            contents: [{ parts: [{ text: `請將以下語言記帳轉換為JSON。語言：「${text}」。這是${ui.workspace==='family'?'家庭':'工作室'}帳本。必填欄位：amount(數字), category(從[${cats.expense.map(c=>c.name).join(',')}]選), type('expense'/'income'/'transfer'), accountId(選擇一個 ID: [${accounts.map(a=>`${a.name}:${a.id}`).join(',')}]), payer('husband'/'wife'/'joint'), note(備註)。若無法判斷則填預設值。` }] }]
+            contents: [{ parts: [{ text: `請將以下語言記帳轉換為JSON。語言：「${text}」。這是家庭帳本。必填欄位：amount(數字), category(從[${cats.expense.map(c=>c.name).join(',')}]選), type('expense'/'income'/'transfer'), accountId(選擇一個 ID: [${accounts.map(a=>`${a.name}:${a.id}`).join(',')}]), payer('husband'/'wife'/'joint'), note(備註)。若無法判斷則填預設值。` }] }]
           })
        };
 
