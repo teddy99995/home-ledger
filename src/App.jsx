@@ -3,7 +3,7 @@ import {
   Plus, X, Trash2, Sparkles, ChevronLeft, ChevronRight, Target, Coins, 
   PieChart as PieChartIcon, ArrowRightLeft, Home, Search, Settings, CheckCircle2, AlertTriangle,
   Barcode, Camera, ClipboardList, StickyNote, Edit3, CalendarHeart, Mic, MicOff,
-  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane
+  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -29,11 +29,10 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // 🤖 您的專屬 Gemini API 金鑰
-// ⚠️ 極度重要：若您目前使用的是 AQ... 開頭的金鑰，必定會遇到 401/Invalid Credentials 錯誤！
-// ⚠️ 請務必前往 Google AI Studio 申請一把 "沒有綁定專案限制" 的新金鑰 (通常為 AIzaSy 開頭)，並貼在下方：
-const apiKey = "請在此貼上您新申請的_AIzaSy_開頭金鑰"; 
+// ⚠️ 警告：請務必填入 "AIzaSy" 開頭的 API 金鑰！如果是 AQ 開頭的 OAuth 憑證將會導致 401 錯誤！
+const apiKey = "AQ.Ab8RN6I_s9Pirhsp49ETH61MshhYI9d-7YEoNAaBlrRTIs6C8A"; 
 
-// 由於移除了工作室，回歸純家庭分類結構
+// 單一家庭帳本分類設定
 const CATEGORIES = {
   expense: [
     { name: '餐飲', icon: '🍽️' }, { name: '購物', icon: '🛍️' }, { name: '交通', icon: '🚗' }, 
@@ -47,7 +46,7 @@ const getLocalYYYYMM = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 const getLocalYYYYMMDD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const calculateDaysDiff = (target) => Math.ceil((new Date(target).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
 
-// 🔥 智慧資料庫路徑設計 (支援 Vercel 與本機)
+// 🔥 智慧資料庫路徑設計
 const isCanvas = typeof __app_id !== 'undefined';
 const safeAppId = isCanvas ? String(__app_id) : ''; 
 
@@ -65,7 +64,7 @@ const getDocRef = (colName, docId) => {
 };
 
 // ==========================================
-// 🛡️ API 防護網 (包含錯誤攔截，防白畫面)
+// 🛡️ API 防護網 (包含錯誤攔截)
 // ==========================================
 const fetchWithBackoff = async (url, options, retries = 3) => {
   const delays = [1000, 2000, 4000];
@@ -106,13 +105,9 @@ export default function App() {
   });
   
   const [settings, setSettings] = useState({ 
-    monthlyBudget: 50000, 
-    husbandBarcode: '', 
-    wifeBarcode: '', 
-    enableRollover: true, 
-    notifyLargeExpense: true, largeExpenseThreshold: 3000, 
+    monthlyBudget: 50000, husbandBarcode: '', wifeBarcode: '',
+    enableRollover: true, notifyLargeExpense: true, largeExpenseThreshold: 3000, 
     notifyBillDue: true, notifyEvents: true, notifyAdvanceDays: 3,
-    // ✈️ 旅遊模式設定
     travelMode: false, travelCurrency: 'JPY', travelRate: 0.21
   });
   
@@ -310,10 +305,10 @@ export default function App() {
     try { await setDoc(getDocRef('shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {}
   };
 
-  // 🤖 AI 顧問呼叫 (完美使用 API Key 放置於 URL 避免 CORS 預檢問題)
+  // 🤖 AI 顧問呼叫 (修復 401 錯誤，套用 AIzaSy 防呆檢查)
   const handleCallAI = async () => {
-    if (!apiKey || apiKey.includes("請在此貼上")) {
-      showToast("系統未設定 API 金鑰！請確認您已貼入新金鑰", "error");
+    if (!apiKey || apiKey.includes("請在此貼上") || apiKey.startsWith("AQ")) {
+      showToast("錯誤：您填入的 AQ... 是 OAuth 憑證，請前往 Google AI Studio 申請 'AIzaSy' 開頭的 API 金鑰！", "error");
       return;
     }
     setIsAiLoading(true); setAiAnalysis('');
@@ -322,7 +317,6 @@ export default function App() {
       let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老公需給老婆${Math.round(settlement.amt)}` : `老婆需給老公${Math.round(settlement.amt)}`);
       const prompt = `這是家庭帳本本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
       
-      // 🌟 解決 401: 使用 gemini-1.5-flash，並把 key 放網址。絕對不使用自訂 Header 避免被瀏覽器 CORS 阻擋。
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
       const options = {
         method: 'POST',
@@ -332,7 +326,7 @@ export default function App() {
 
       const resData = await fetchWithBackoff(url, options);
       
-      if (!resData || !resData.candidates) throw new Error("API 回傳異常，請確認金鑰是否為無需權限的 API Key");
+      if (!resData || !resData.candidates) throw new Error("API 回傳格式錯誤或遭拒絕");
       setAiAnalysis(resData.candidates[0].content.parts[0].text);
     } catch (err) { 
       setAiAnalysis(`AI 服務連線異常：${err.message}`); 
@@ -389,7 +383,6 @@ export default function App() {
     ring: 'focus:ring-[#C86D23]'
   };
 
-  // ✈️ 旅遊模式覆蓋配色
   if (settings.travelMode) {
      t = {
        ...t,
@@ -399,7 +392,6 @@ export default function App() {
      }
   }
 
-  // 🛡️ 防護白畫面的安全開啟表單函數
   const handleOpenTx = (tx = null) => {
     try {
       updateUi({ modal: 'tx', selectedTx: tx });
@@ -422,23 +414,9 @@ export default function App() {
       <div className={`min-h-[100dvh] w-full flex justify-center ${t.bg} transition-colors duration-500 overflow-x-hidden font-sans`}>
         <div className={`w-full max-w-md md:max-w-xl ${t.text} relative flex flex-col min-h-[100dvh] ${t.cardInner} md:border-x md:shadow-2xl ${t.border}`}>
           
-          {/* 安全刪除確認 Modal */}
-          {ui.confirm && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-              <div className={`${t.cardInner} rounded-3xl p-8 w-full max-w-xs shadow-2xl text-center border ${t.border}`}>
-                <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-5 bg-red-500/10 p-3 rounded-full" />
-                <h3 className={`text-xl font-bold ${t.text} mb-8`}>{ui.confirm.message}</h3>
-                <div className="flex gap-4">
-                  <button onClick={() => updateUi({confirm: null})} className={`flex-1 py-4 rounded-xl font-bold text-base ${t.textM} ${t.bg} active:scale-95`}>取消</button>
-                  <button onClick={ui.confirm.onConfirm} className="flex-1 py-4 rounded-xl font-bold text-base text-white bg-red-500 shadow-md active:scale-95">刪除</button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Toast 提示 */}
           {ui.toast && (
-            <div className="fixed top-6 left-0 right-0 z-[100] flex justify-center px-4 animate-in slide-in-from-top-4">
+            <div className="fixed top-6 left-0 right-0 z-[100] flex justify-center px-4 animate-in slide-in-from-top-4 pointer-events-none">
               <div className={`flex items-center gap-3 px-6 py-4 rounded-full shadow-2xl border ${t.cardInner} ${t.border} ${t.text}`}>
                 <CheckCircle2 className={`w-6 h-6 ${ui.toast.type === 'error' ? 'text-red-500' : 'text-emerald-500'}`} />
                 <span className="font-bold text-base truncate max-w-xs">{ui.toast.msg}</span>
@@ -895,9 +873,9 @@ export default function App() {
 
           {/* ================= 彈出視窗 (Modals) ================= */}
           {ui.modal && (
-            <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in">
-              <div className={`w-full max-w-md md:max-w-xl ${t.cardInner} rounded-t-[2.5rem] sm:rounded-[2.5rem] p-7 pb-safe border ${t.border} max-h-[95vh] overflow-y-auto hide-scrollbar flex flex-col shadow-2xl`}>
-                <div className="flex justify-between items-center mb-6 shrink-0">
+            <div className="fixed inset-0 z-[50] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in">
+              <div className={`w-full max-w-md md:max-w-xl ${t.cardInner} rounded-t-[2.5rem] sm:rounded-[2.5rem] pt-6 px-6 pb-0 border ${t.border} max-h-[95vh] flex flex-col shadow-2xl overflow-hidden`}>
+                <div className="flex justify-between items-center mb-4 shrink-0 px-2">
                   <h3 className="font-black text-2xl flex items-center gap-2">
                     {ui.modal === 'settings' && <Settings className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'barcode' && <Barcode className={`w-6 h-6 ${t.textM}`}/>}
@@ -909,133 +887,146 @@ export default function App() {
                   </button>
                 </div>
                 
-                {/* 彈窗渲染 */}
-                {ui.modal === 'tx' && (
-                  <TxForm 
-                    accounts={data.accounts} cats={CATEGORIES} tags={data.tags} initialData={ui.selectedTx} 
-                    templates={data.templates} settings={settings}
-                    onAI={() => updateUi({ modal: 'ai' })} onAddTag={handleAddGlobalTag}
-                    onSaveTemplate={(tpl) => doAction(() => addDoc(getCol('shared_templates'), {...tpl, createdAt: serverTimestamp()}), '範本已儲存')}
-                    onDeleteTemplate={(id) => doAction(() => deleteDoc(getDocRef('shared_templates', id)), '範本已移除')}
-                    onSave={(txData) => { 
-                      const { id, ...payload } = txData;
-                      payload.updatedAt = serverTimestamp();
-                      
-                      Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
-
-                      if(id) {
-                        doAction(() => updateDoc(getDocRef('shared_ledger', id), payload), '修改成功'); 
-                      } else {
-                        payload.date = getLocalYYYYMMDD(ui.date);
-                        payload.month = getLocalYYYYMM(ui.date);
-                        payload.createdAt = serverTimestamp();
-                        payload.createdBy = user ? user.uid : 'unknown';
-                        doAction(() => addDoc(getCol('shared_ledger'), payload), '記帳成功'); 
-                      }
-                    }} 
-                    t={t} ui={ui}
-                  />
-                )}
-                {ui.modal === 'ai' && (
-                  <AIForm cats={CATEGORIES} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} onSave={(txData) => doAction(() => addDoc(getCol('shared_ledger'), {...txData, date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date), createdAt: serverTimestamp(), createdBy: user ? user.uid : 'unknown'}), 'AI 記帳成功')} showToast={showToast} t={t} ui={ui} />
-                )}
-                {ui.modal === 'date' && (
-                  <div className="grid grid-cols-3 gap-3">
-                    {Array.from({length:12}).map((_,i) => (
-                      <button key={i} onClick={() => { updateUi({ date: new Date(ui.date.getFullYear(), i, 1), modal: null }); }} className={`py-5 rounded-2xl font-bold border text-lg active:scale-95 transition-all ${ui.date.getMonth()===i ? `${t.primary} text-white border-transparent shadow-md` : `${t.bg} ${t.border}`}`}>
-                        {i+1}月
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {ui.modal === 'settings' && (
-                  <SettingsForm settings={settings} onSave={(s) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), s, {merge:true}), '設定已儲存')} onExport={handleExportToSheets} onRecurring={() => updateUi({ modal: 'recurring' })} t={t} />
-                )}
-                {ui.modal === 'recurring' && (
-                  <RecurringForm 
-                    rules={data.recurringRules} accounts={data.accounts} cats={CATEGORIES} 
-                    onSave={r => doAction(() => addDoc(getCol('recurring_rules'), r), '自動記帳規則已建立')} 
-                    onDelete={id => confirmDel('刪除此規則？', () => deleteDoc(getDocRef('recurring_rules', id)))} 
-                    t={t} 
-                  />
-                )}
-                {ui.modal === 'barcode' && (
-                  <BarcodeForm codes={{h:settings.husbandBarcode, w:settings.wifeBarcode}} onSave={(h,w) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), {husbandBarcode:h, wifeBarcode:w}, {merge:true}), '載具已儲存')} t={t} />
-                )}
-                
-                {/* 🌟 完美的推播與通知面板 (新增消掉按鈕 X) */}
-                {ui.modal === 'notify' && (
-                  <div className="space-y-4">
-                    {activeAlerts.length === 0 ? (
-                      <div className={`flex flex-col items-center justify-center py-16 text-center ${t.textM}`}>
-                        <Bell className="w-16 h-16 mb-4 opacity-50" />
-                        <span className="font-bold text-lg">目前沒有任何新通知 🎉</span>
-                      </div>
-                    ) : activeAlerts.map(a => (
-                      <div key={a.id} className={`flex items-center gap-4 p-5 rounded-3xl border ${t.border} ${t.bg} relative shadow-sm`}>
-                        <div className={`w-14 h-14 rounded-full ${t.cardInner} flex items-center justify-center text-3xl shadow-sm shrink-0`}>
-                          {a.icon}
-                        </div>
-                        <div className="flex-1 pr-6">
-                          <h4 className="font-extrabold text-lg mb-1">{a.title}</h4>
-                          <p className={`text-sm font-bold ${t.textM}`}>{a.desc}</p>
-                        </div>
-                        {/* 🌟 單獨關閉該通知的按鈕 */}
-                        <button 
-                          onClick={() => setDismissedAlerts(prev => [...prev, a.id])} 
-                          className={`absolute top-5 right-5 text-stone-400 hover:text-rose-500 active:scale-95 transition-colors`}
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                {ui.modal === 'account' && (
-                  <AccForm onSave={d => doAction(() => addDoc(getCol('shared_accounts'), {...d, createdAt: serverTimestamp()}), '帳戶建立')} t={t} />
-                )}
-                {ui.modal === 'bill' && (
-                  <BillForm onSave={d => doAction(() => addDoc(getCol('shared_bills'), {...d, isPaid: false, createdAt: serverTimestamp()}), '帳單建立')} t={t} />
-                )}
-                {ui.modal === 'note' && (
-                  <NoteForm 
-                    data={ui.selectedItem} 
-                    onSave={d => {
-                      const { id, ...payload } = d;
-                      payload.updatedAt = serverTimestamp();
-                      Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
-                      if (id) doAction(() => updateDoc(getDocRef('shared_notes', id), payload), '修改成功');
-                      else { payload.createdAt = serverTimestamp(); doAction(() => addDoc(getCol('shared_notes'), payload), '新增成功'); }
-                    }} 
-                    onDelete={id => confirmDel('刪除筆記？', () => deleteDoc(getDocRef('shared_notes', id)))} 
-                    t={t} 
-                  />
-                )}
-                {ui.modal === 'event' && (
-                  <EventForm onSave={d => doAction(() => addDoc(getCol('shared_events'), {...d, createdAt: serverTimestamp()}), '建立成功')} t={t} />
-                )}
-                {ui.modal === 'goal' && (
-                  <GoalForm onSave={d => doAction(() => addDoc(getCol('shared_goals'), {...d, currentAmount: 0, createdAt: serverTimestamp()}), '目標建立')} t={t} />
-                )}
-                {ui.modal === 'fund' && (
-                  <FundForm goal={ui.selectedItem} onSave={amt => doAction(() => updateDoc(getDocRef('shared_goals', ui.selectedItem.id), {currentAmount: ui.selectedItem.currentAmount + amt}), '存入成功')} t={t} />
-                )}
-                {ui.modal === 'tags' && (
-                  <div className="space-y-5">
-                    <div className="flex flex-wrap gap-2">
-                      {data.tags.map(tag => (
-                        <button key={tag} onClick={() => updateUi({filterTags: ui.filterTags.includes(tag) ? ui.filterTags.filter(x=>x!==tag) : [...ui.filterTags,tag]})} className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 ${ui.filterTags.includes(tag) ? `${t.primary} text-white border-transparent shadow-sm` : `${t.bg} ${t.border}`}`}>
-                          #{tag}
+                {/* 彈窗內容區塊 */}
+                <div className="flex-1 overflow-y-auto hide-scrollbar pb-safe">
+                  {ui.modal === 'tx' && (
+                    <TxForm 
+                      accounts={data.accounts} cats={CATEGORIES} tags={data.tags} initialData={ui.selectedTx} 
+                      templates={data.templates} settings={settings}
+                      onAI={() => updateUi({ modal: 'ai' })} onAddTag={handleAddGlobalTag}
+                      onSaveTemplate={(tpl) => doAction(() => addDoc(getCol('shared_templates'), {...tpl, createdAt: serverTimestamp()}), '範本已儲存')}
+                      onDeleteTemplate={(id) => doAction(() => deleteDoc(getDocRef('shared_templates', id)), '範本已移除')}
+                      onSave={(txData) => { 
+                        const { id, ...payload } = txData;
+                        payload.updatedAt = serverTimestamp();
+                        Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
+                        if(id) {
+                          doAction(() => updateDoc(getDocRef('shared_ledger', id), payload), '修改成功'); 
+                        } else {
+                          payload.date = getLocalYYYYMMDD(ui.date);
+                          payload.month = getLocalYYYYMM(ui.date);
+                          payload.createdAt = serverTimestamp();
+                          payload.createdBy = user ? user.uid : 'unknown';
+                          doAction(() => addDoc(getCol('shared_ledger'), payload), '記帳成功'); 
+                        }
+                      }} 
+                      t={t} ui={ui}
+                    />
+                  )}
+                  {ui.modal === 'ai' && (
+                    <AIForm cats={CATEGORIES} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} onSave={(txData) => doAction(() => addDoc(getCol('shared_ledger'), {...txData, date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date), createdAt: serverTimestamp(), createdBy: user ? user.uid : 'unknown'}), 'AI 記帳成功')} showToast={showToast} t={t} ui={ui} />
+                  )}
+                  {ui.modal === 'date' && (
+                    <div className="grid grid-cols-3 gap-3">
+                      {Array.from({length:12}).map((_,i) => (
+                        <button key={i} onClick={() => { updateUi({ date: new Date(ui.date.getFullYear(), i, 1), modal: null }); }} className={`py-5 rounded-2xl font-bold border text-lg active:scale-95 transition-all ${ui.date.getMonth()===i ? `${t.primary} text-white border-transparent shadow-md` : `${t.bg} ${t.border}`}`}>
+                          {i+1}月
                         </button>
                       ))}
                     </div>
-                    <button onClick={() => updateUi({filterTags:[], modal:null})} className={`w-full py-4 rounded-2xl font-bold text-lg ${t.bg} active:scale-95`}>清除篩選</button>
-                  </div>
-                )}
+                  )}
+                  {ui.modal === 'settings' && (
+                    <SettingsForm settings={settings} onSave={(s) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), s, {merge:true}), '設定已儲存')} onExport={handleExportToSheets} onRecurring={() => updateUi({ modal: 'recurring' })} t={t} />
+                  )}
+                  {ui.modal === 'recurring' && (
+                    <RecurringForm 
+                      rules={data.recurringRules} accounts={data.accounts} cats={CATEGORIES} 
+                      onSave={r => doAction(() => addDoc(getCol('recurring_rules'), r), '自動記帳規則已建立')} 
+                      onDelete={id => confirmDel('刪除此規則？', () => deleteDoc(getDocRef('recurring_rules', id)))} 
+                      t={t} 
+                    />
+                  )}
+                  {ui.modal === 'barcode' && (
+                    <BarcodeForm codes={{h:settings.husbandBarcode, w:settings.wifeBarcode}} onSave={(h, w) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), {husbandBarcode:h, wifeBarcode:w}, {merge:true}), '載具已儲存')} t={t} />
+                  )}
+                  
+                  {ui.modal === 'notify' && (
+                    <div className="space-y-4">
+                      {activeAlerts.length === 0 ? (
+                        <div className={`flex flex-col items-center justify-center py-16 text-center ${t.textM}`}>
+                          <Bell className="w-16 h-16 mb-4 opacity-50" />
+                          <span className="font-bold text-lg">目前沒有任何新通知 🎉</span>
+                        </div>
+                      ) : activeAlerts.map(a => (
+                        <div key={a.id} className={`flex items-center gap-4 p-5 rounded-3xl border ${t.border} ${t.bg} relative shadow-sm`}>
+                          <div className={`w-14 h-14 rounded-full ${t.cardInner} flex items-center justify-center text-3xl shadow-sm shrink-0`}>
+                            {a.icon}
+                          </div>
+                          <div className="flex-1 pr-6">
+                            <h4 className="font-extrabold text-lg mb-1">{a.title}</h4>
+                            <p className={`text-sm font-bold ${t.textM}`}>{a.desc}</p>
+                          </div>
+                          <button 
+                            onClick={() => setDismissedAlerts(prev => [...prev, a.id])} 
+                            className={`absolute top-5 right-5 text-stone-400 hover:text-rose-500 active:scale-95 transition-colors`}
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {ui.modal === 'account' && (
+                    <AccForm onSave={d => doAction(() => addDoc(getCol('shared_accounts'), {...d, createdAt: serverTimestamp()}), '帳戶建立')} t={t} />
+                  )}
+                  {ui.modal === 'bill' && (
+                    <BillForm onSave={d => doAction(() => addDoc(getCol('shared_bills'), {...d, isPaid: false, createdAt: serverTimestamp()}), '帳單建立')} t={t} />
+                  )}
+                  {ui.modal === 'note' && (
+                    <NoteForm 
+                      data={ui.selectedItem} 
+                      onSave={d => {
+                        const { id, ...payload } = d;
+                        payload.updatedAt = serverTimestamp();
+                        Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
+                        if (id) doAction(() => updateDoc(getDocRef('shared_notes', id), payload), '修改成功');
+                        else { payload.createdAt = serverTimestamp(); doAction(() => addDoc(getCol('shared_notes'), payload), '新增成功'); }
+                      }} 
+                      onDelete={id => confirmDel('刪除筆記？', () => deleteDoc(getDocRef('shared_notes', id)))} 
+                      t={t} 
+                    />
+                  )}
+                  {ui.modal === 'event' && (
+                    <EventForm onSave={d => doAction(() => addDoc(getCol('shared_events'), {...d, createdAt: serverTimestamp()}), '建立成功')} t={t} />
+                  )}
+                  {ui.modal === 'goal' && (
+                    <GoalForm onSave={d => doAction(() => addDoc(getCol('shared_goals'), {...d, currentAmount: 0, createdAt: serverTimestamp()}), '目標建立')} t={t} />
+                  )}
+                  {ui.modal === 'fund' && (
+                    <FundForm goal={ui.selectedItem} onSave={amt => doAction(() => updateDoc(getDocRef('shared_goals', ui.selectedItem.id), {currentAmount: ui.selectedItem.currentAmount + amt}), '存入成功')} t={t} />
+                  )}
+                  {ui.modal === 'tags' && (
+                    <div className="space-y-5">
+                      <div className="flex flex-wrap gap-2">
+                        {data.tags.map(tag => (
+                          <button key={tag} onClick={() => updateUi({filterTags: ui.filterTags.includes(tag) ? ui.filterTags.filter(x=>x!==tag) : [...ui.filterTags,tag]})} className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 ${ui.filterTags.includes(tag) ? `${t.primary} text-white border-transparent shadow-sm` : `${t.bg} ${t.border}`}`}>
+                            #{tag}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={() => updateUi({filterTags:[], modal:null})} className={`w-full py-4 rounded-2xl font-bold text-lg ${t.bg} active:scale-95`}>清除篩選</button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
+          
+          {/* 🔥 刪除確認 Modal (設定 z-[9999] 保證絕對在最上層) */}
+          {ui.confirm && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+              <div className={`${t.cardInner} rounded-3xl p-8 w-full max-w-xs shadow-2xl text-center border ${t.border}`}>
+                <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-5 bg-red-500/10 p-3 rounded-full" />
+                <h3 className={`text-xl font-bold ${t.text} mb-8`}>{ui.confirm.message}</h3>
+                <div className="flex gap-4">
+                  <button onClick={() => updateUi({confirm: null})} className={`flex-1 py-4 rounded-xl font-bold text-base ${t.textM} ${t.bg} active:scale-95`}>取消</button>
+                  <button onClick={ui.confirm.onConfirm} className="flex-1 py-4 rounded-xl font-bold text-base text-white bg-red-500 shadow-md active:scale-95">刪除</button>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
     </React.Fragment>
@@ -1046,7 +1037,7 @@ export default function App() {
 // 4. 獨立子組件庫 (Forms & Modals)
 // ==========================================
 
-// 🌟 記帳表單 (含真四則運算 4x4 計算機 與 一鍵範本，視覺鎖定防呆)
+// 🌟 記帳表單 (視覺鎖定計算機 + 一鍵範本 + 折疊按鈕)
 const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, t, ui }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, type: initialData?.type || 'expense', category: initialData?.category || cats.expense[0].name, 
@@ -1055,11 +1046,11 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
     note: initialData?.note || '', payer: initialData?.payer || 'joint', split: initialData?.split || 'half', tags: initialData?.tags || [] 
   });
   
+  const [showK, setShowK] = useState(true);
   const [newTag, setNewTag] = useState('');
   const [isOCR, setIsOCR] = useState(false);
   const fileInputRef = useRef(null);
   
-  // 🧮 支援四則運算的防呆計算邏輯
   const evaluateMath = (str) => {
     try {
       if (!str) return '';
@@ -1081,7 +1072,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
 
   const submit = () => { 
     let finalAmount = Number(evaluateMath(data.amount));
-    // ✈️ 旅遊模式：自動轉換匯率
     if (settings.travelMode && finalAmount > 0) {
       finalAmount = Math.round(finalAmount * (settings.travelRate || 1));
       data.note = `[${settings.travelCurrency} ${data.amount}] ${data.note}`;
@@ -1103,10 +1093,9 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
     }
   };
 
-  // 📸 OCR 拍照辨識
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file || !apiKey || apiKey.includes("請在此貼上")) return alert(apiKey && !apiKey.includes("請在此貼上") ? "無法讀取照片" : "請先設定正確的 API 金鑰");
+    if (!file || !apiKey || apiKey.includes("請在此貼上")) return alert(apiKey && !apiKey.includes("請在此貼上") ? "無法讀取照片" : "請先設定 API 金鑰");
     
     setIsOCR(true);
     try {
@@ -1114,8 +1103,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       reader.readAsDataURL(file);
       reader.onload = async () => {
         const base64Data = reader.result.split(',')[1];
-        
-        // 🌟 OCR 也使用 URL ?key= 避免 CORS
         const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1144,34 +1131,36 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
   };
 
   return (
-    <div className="flex flex-col h-[75vh]">
+    <div className="flex flex-col h-full">
       {/* 🌟 上半部：可滾動的設定區 */}
-      <div className="flex-1 overflow-y-auto space-y-4 px-1 pb-4 hide-scrollbar">
+      <div className="flex-1 overflow-y-auto space-y-4 px-1 pb-16 hide-scrollbar relative">
         
         {/* 一鍵記帳範本區 (可橫向捲動) */}
-        <div className="flex gap-2 overflow-x-auto hide-scrollbar py-1 mb-2">
-          {templates && templates.map(tpl => (
-            <div key={tpl.id} className={`relative flex items-center shrink-0 ${t.bg} border ${t.border} rounded-xl pl-3 pr-8 py-2 shadow-sm group`}>
-               <span 
-                 onClick={() => setData({ ...data, ...tpl.txData, amount: String(tpl.txData.amount) })} 
-                 className={`font-bold text-sm cursor-pointer ${t.text}`}
-               >
-                 {tpl.name}
-               </span>
-               <button 
-                 onClick={() => onDeleteTemplate(tpl.id)} 
-                 className="absolute right-2 text-stone-400 hover:text-red-500 transition-colors p-1"
-               >
-                 <X className="w-3.5 h-3.5" strokeWidth={3} />
-               </button>
-            </div>
-          ))}
-          <button 
-             onClick={handleSaveTemplate} 
-             className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 border-2 border-dashed ${t.border} rounded-xl text-xs font-bold ${t.textM} hover:${t.primaryText} transition-colors`}
-          >
-             <Save className="w-4 h-4" /> 存為範本
-          </button>
+        <div className="flex justify-between items-center mb-2">
+           <div className="flex gap-2 overflow-x-auto hide-scrollbar py-1">
+             <button 
+                onClick={handleSaveTemplate} 
+                className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-1.5 border-2 border-dashed ${t.border} rounded-xl text-xs font-bold ${t.textM} hover:${t.primaryText} transition-colors`}
+             >
+                <Save className="w-3.5 h-3.5" /> 存為範本
+             </button>
+             {templates && templates.map(tpl => (
+               <div key={tpl.id} className={`relative flex items-center shrink-0 ${t.bg} border ${t.border} rounded-xl pl-3 pr-8 py-1.5 shadow-sm group`}>
+                  <span 
+                    onClick={() => setData({ ...data, ...tpl.txData, amount: String(tpl.txData.amount) })} 
+                    className={`font-bold text-sm cursor-pointer ${t.text}`}
+                  >
+                    {tpl.name}
+                  </span>
+                  <button 
+                    onClick={() => onDeleteTemplate(tpl.id)} 
+                    className="absolute right-2 text-stone-400 hover:text-red-500 transition-colors p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" strokeWidth={3} />
+                  </button>
+               </div>
+             ))}
+           </div>
         </div>
 
         {!initialData && (
@@ -1240,7 +1229,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
           <button 
             onClick={() => fileInputRef.current.click()} 
             disabled={isOCR}
-            className={`p-4 rounded-xl font-bold flex items-center justify-center active:scale-95 ${t.bg} border-none ${t.textM} relative`}
+            className={`p-4 rounded-xl font-bold flex items-center justify-center active:scale-95 ${t.bg} border-none ${t.textM} relative shadow-sm`}
           >
             {isOCR ? <Loader2 className="animate-spin w-6 h-6" /> : <Camera className="w-6 h-6" />}
             <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handlePhotoUpload} />
@@ -1248,7 +1237,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         </div>
         
         {data.type !== 'transfer' && (
-          <div className={`p-3 rounded-xl border ${t.border} ${t.bg} flex items-center gap-3`}>
+          <div className={`p-3 rounded-xl border ${t.border} ${t.bg} flex items-center gap-3 mb-10`}>
             <span className={`text-xs font-bold w-12 ${t.textM} px-2`}>付款人</span>
             <div className="flex gap-2 flex-1">
               {['husband', 'wife', 'joint'].map(r => (
@@ -1258,48 +1247,66 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
           </div>
         )}
       </div>
+
+      {/* 折疊按鈕 */}
+      <div className="flex justify-center -mb-4 relative z-10">
+         <button onClick={() => setShowK(!showK)} className={`bg-white dark:bg-slate-800 border ${t.border} rounded-full p-1.5 shadow-sm text-stone-400 hover:text-indigo-500 transition-transform ${!showK ? 'rotate-180' : ''}`}>
+            <ChevronDown className="w-5 h-5" />
+         </button>
+      </div>
       
       {/* 🌟 下半部：永久鎖定在底部的「大金額顯示 + 4x4 計算機」 */}
-      <div className={`shrink-0 pt-3 border-t ${t.border} bg-transparent`}>
-        {/* 金額顯示鎖定在這裡，打字不怕看不到！ */}
-        <div className={`flex justify-between items-center px-4 py-3 mx-2 mb-3 rounded-2xl ${ui.isDark ? 'bg-[#1E293B] shadow-inner' : 'bg-stone-50 border border-stone-200'}`}>
-          <span className={`font-bold text-sm ${t.textM}`}>
-            {settings.travelMode ? `輸入 ${settings.travelCurrency}` : '輸入金額'}
-          </span>
-          <span className={`text-4xl font-black ${t.text} truncate max-w-[200px] text-right`}>{data.amount || '0'}</span>
-        </div>
+      {showK && (
+        <div className={`shrink-0 border-t ${t.border} pt-5 pb-safe bg-transparent shadow-[0_-4px_10px_rgba(0,0,0,0.02)] animate-in slide-in-from-bottom-2`}>
+          {/* 金額顯示鎖定在這裡，打字不怕看不到！ */}
+          <div className={`flex justify-between items-center px-4 py-3 mx-2 mb-3 rounded-2xl ${ui.isDark ? 'bg-[#1E293B] shadow-inner' : 'bg-stone-50 border border-stone-200'}`}>
+            <span className={`font-bold text-sm ${t.textM}`}>
+              {settings.travelMode ? `輸入 ${settings.travelCurrency}` : '輸入金額'}
+            </span>
+            <span className={`text-4xl font-black ${t.text} truncate max-w-[200px] text-right`}>{data.amount || '0'}</span>
+          </div>
 
-        {/* 4x4 真四則運算計算機陣列 */}
-        <div className={`grid grid-cols-4 gap-2 px-2 pb-2`}>
-          {['7','8','9','÷', '4','5','6','×', '1','2','3','-', 'C','0','.','+', '⌫','00','=','OK'].map((k, i) => {
-            const isOp = ['÷','×','-','+','='].includes(k);
-            const isC = k === 'C' || k === '⌫';
-            let btnClass = '';
-            
-            if (ui.isDark) {
-              if (isOp) btnClass = 'bg-[#1E293B] text-rose-500'; 
-              else if (isC) btnClass = 'bg-[#1E293B] text-stone-400'; 
-              else btnClass = 'bg-[#111827] text-white shadow-sm'; 
-            } else {
-              if (isOp) btnClass = 'bg-stone-200 text-rose-500'; 
-              else if (isC) btnClass = 'bg-stone-300 text-stone-600'; 
-              else btnClass = 'bg-white text-stone-800 shadow-sm border border-stone-100'; 
-            }
+          {/* 4x4 真四則運算計算機陣列 */}
+          <div className={`grid grid-cols-4 gap-2 px-2 pb-2`}>
+            {['7','8','9','÷', '4','5','6','×', '1','2','3','-', 'C','0','.','+', '⌫','00','=','OK'].map((k, i) => {
+              const isOp = ['÷','×','-','+','='].includes(k);
+              const isC = k === 'C' || k === '⌫';
+              let btnClass = '';
+              
+              if (ui.isDark) {
+                if (isOp) btnClass = 'bg-[#1E293B] text-rose-500'; 
+                else if (isC) btnClass = 'bg-[#1E293B] text-stone-400'; 
+                else btnClass = 'bg-[#111827] text-white shadow-sm'; 
+              } else {
+                if (isOp) btnClass = 'bg-stone-200 text-rose-500'; 
+                else if (isC) btnClass = 'bg-stone-300 text-stone-600'; 
+                else btnClass = 'bg-white text-stone-800 shadow-sm border border-stone-100'; 
+              }
 
-            return (
-              <button key={i} onClick={() => k === 'OK' ? submit() : handleKey(k)} className={`h-[56px] rounded-2xl font-black text-[22px] active:scale-95 transition-all ${k === 'OK' ? `col-span-1 ${t.primary} text-white shadow-md` : btnClass}`}>
-                {k}
-              </button>
-            )
-          })}
+              return (
+                <button key={i} onClick={() => k === 'OK' ? submit() : handleKey(k)} className={`h-[56px] rounded-2xl font-black text-[22px] active:scale-95 transition-all ${k === 'OK' ? `col-span-1 ${t.primary} text-white shadow-md` : btnClass}`}>
+                  {k}
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* 如果收起鍵盤，只顯示大確認按鈕與金額 */}
+      {!showK && (
+        <div className={`shrink-0 border-t ${t.border} pt-4 pb-safe px-2 bg-transparent animate-in slide-in-from-bottom-2`}>
+           <button onClick={submit} className={`w-full py-4 rounded-2xl font-black text-xl text-white shadow-md active:scale-95 ${ui.isDark ? t.primary : 'bg-[#A29188]'}`}>
+             確認{initialData ? '修改' : '記帳'} (${data.amount || '0'})
+           </button>
+        </div>
+      )}
     </div>
   );
 };
 
 // ==========================================
-// 🌟 AI 語音記帳表單 (修復 CORS 與 401 錯誤)
+// 🌟 AI 語音記帳表單 (修復 401 錯誤)
 // ==========================================
 const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
   const [text, setText] = useState(''); 
@@ -1329,14 +1336,14 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
   };
   
   const handleParse = async () => {
-    if (!apiKey || apiKey.includes("請在此貼上")) {
-      showToast("系統未設定 API 金鑰，無法啟用 AI 服務", "error");
+    if (!apiKey || apiKey.includes("請在此貼上") || apiKey.startsWith("AQ")) {
+      showToast("錯誤：您填入的 AQ... 是 OAuth 憑證，請前往 Google AI Studio 申請 'AIzaSy' 開頭的 API 金鑰！", "error");
       return;
     }
     if (!text.trim()) return; 
     setLoading(true);
     try {
-       // 🌟 完美解法：把 Key 放在 URL 參數中，不要放在 Header，瀏覽器才不會擋！
+       // 🌟 解決 401 錯誤：將 Key 綁定於 URL
        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
        const options = {
           method: 'POST', 
@@ -1378,7 +1385,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
 }
 
 // ==========================================
-// 高質感設定表單 (包含旅遊模式)
+// 高質感設定表單
 // ==========================================
 const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
   const [s, setS] = useState(settings);
@@ -1468,7 +1475,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
 };
 
 // ==========================================
-// 🌟 實體條碼展示與載具設定表單 (移除密碼，純淨展示)
+// 🌟 實體條碼展示 (純淨版，無密碼欄位)
 // ==========================================
 const BarcodeDisplay = ({ code, t }) => {
   const safeCode = code ? encodeURIComponent(code) : '';
@@ -1516,7 +1523,7 @@ const BarcodeForm = ({ codes, onSave, t }) => {
             <label className={`text-xs font-bold ${t.textM} px-1`}>{tab === 'h' ? '老公' : '老婆'} 手機條碼</label>
             <input value={tab === 'h' ? h : w} onChange={e => tab === 'h' ? setH(e.target.value.toUpperCase()) : setW(e.target.value.toUpperCase())} className={`w-full p-4 rounded-xl uppercase font-mono text-base font-bold ${t.cardInner} border ${t.border} shadow-sm outline-none focus:ring-2 ${t.ring}`} placeholder="/..." />
           </div>
-          <button onClick={() => { onSave(h, '', w, ''); setMode('view'); }} className={`w-full py-4 rounded-xl font-bold text-base text-white shadow-md ${t.primary} mt-2 active:scale-95`}>儲存設定</button>
+          <button onClick={() => { onSave(h, w); setMode('view'); }} className={`w-full py-4 rounded-xl font-bold text-base text-white shadow-md ${t.primary} mt-2 active:scale-95`}>儲存設定</button>
         </div>
       )}
     </div>
@@ -1530,8 +1537,8 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
   const [view, setView] = useState('list');
   const [step, setStep] = useState(1);
   const [r, setR] = useState({ 
-    name: '', frequency: 'monthly', interval: 1, workspace: 'family',
-    txData: { type: 'expense', category: cats.family.expense[0].name, accountId: accounts[0]?.id||'', amount: '', note: '' } 
+    name: '', frequency: 'monthly', interval: 1, 
+    txData: { type: 'expense', category: cats.expense[0].name, accountId: accounts[0]?.id||'', amount: '', note: '' } 
   });
 
   if (view === 'list') {
@@ -1598,7 +1605,7 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
         <div className="space-y-5 flex-1 flex flex-col">
           <p className={`font-bold text-xs ${t.textM} px-1`}>設定時間到了要自動記下的內容：</p>
           <TxForm 
-            accounts={accounts} cats={cats.family} tags={[]} initialData={null} templates={[]} settings={{}}
+            accounts={accounts} cats={cats} tags={[]} initialData={null} templates={[]} settings={{}}
             onAI={() => { alert('自動化規則請手動設定內容喔！') }} onAddTag={() => {}} onSaveTemplate={() => {}} onDeleteTemplate={() => {}}
             onSave={(txData) => { setR({ ...r, txData }); setStep(3); }} t={t} ui={{isDark: t.bg.includes('0F')}}
           />
