@@ -28,10 +28,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 🤖 Gemini API 金鑰
-// ⚠️ 如果仍遇到 Invalid authentication credentials，請重新申請一把 AIzaSy 開頭的新金鑰！
-const apiKey = "AQ.Ab8RN6KkNEr087TvY8JC6nO2KuZwPd6omWbk1AHNwREYoYNmjw"; 
+// 🤖 您的專屬 Gemini API 金鑰
+// ⚠️ 極度重要：若您目前使用的是 AQ... 開頭的金鑰，必定會遇到 401/Invalid Credentials 錯誤！
+// ⚠️ 請務必前往 Google AI Studio 申請一把 "沒有綁定專案限制" 的新金鑰 (通常為 AIzaSy 開頭)，並貼在下方：
+const apiKey = "請在此貼上您新申請的_AIzaSy_開頭金鑰"; 
 
+// 由於移除了工作室，回歸純家庭分類結構
 const CATEGORIES = {
   expense: [
     { name: '餐飲', icon: '🍽️' }, { name: '購物', icon: '🛍️' }, { name: '交通', icon: '🚗' }, 
@@ -45,7 +47,7 @@ const getLocalYYYYMM = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 const getLocalYYYYMMDD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const calculateDaysDiff = (target) => Math.ceil((new Date(target).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
 
-// 🔥 智慧資料庫路徑設計
+// 🔥 智慧資料庫路徑設計 (支援 Vercel 與本機)
 const isCanvas = typeof __app_id !== 'undefined';
 const safeAppId = isCanvas ? String(__app_id) : ''; 
 
@@ -63,7 +65,7 @@ const getDocRef = (colName, docId) => {
 };
 
 // ==========================================
-// 🛡️ API 防護網 (包含錯誤捕捉)
+// 🛡️ API 防護網 (包含錯誤攔截，防白畫面)
 // ==========================================
 const fetchWithBackoff = async (url, options, retries = 3) => {
   const delays = [1000, 2000, 4000];
@@ -105,8 +107,8 @@ export default function App() {
   
   const [settings, setSettings] = useState({ 
     monthlyBudget: 50000, 
-    husbandBarcode: '', husbandCert: '',
-    wifeBarcode: '', wifeCert: '',
+    husbandBarcode: '', 
+    wifeBarcode: '', 
     enableRollover: true, 
     notifyLargeExpense: true, largeExpenseThreshold: 3000, 
     notifyBillDue: true, notifyEvents: true, notifyAdvanceDays: 3,
@@ -155,7 +157,7 @@ export default function App() {
     return onAuthStateChanged(auth, setUser);
   }, []);
 
-  // 資料監聽
+  // 資料監聽 (回歸單一家庭帳本結構)
   useEffect(() => {
     if (!user) return;
     const unsubs = [
@@ -171,7 +173,6 @@ export default function App() {
       onSnapshot(getDocRef('shared_tags', 'main'), doc => setData(prev => ({ ...prev, tags: doc.exists() ? doc.data().tags : [] }))),
       onSnapshot(getCol('recurring_rules'), snap => setData(prev => ({ ...prev, recurringRules: snap.docs.map(d => ({ id: d.id, ...d.data() })) }))),
       onSnapshot(getCol('shared_templates'), snap => setData(prev => ({ ...prev, templates: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))),
-      
       onSnapshot(getCol('shared_ledger'), snap => setData(p => ({ ...p, tx: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()) }))),
       onSnapshot(getCol('shared_bills'), snap => setData(p => ({ ...p, bills: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.dueDate - b.dueDate) }))),
       onSnapshot(getCol('shared_notes'), snap => setData(p => ({ ...p, notes: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.updatedAt?.toMillis() - a.updatedAt?.toMillis()) }))),
@@ -288,7 +289,13 @@ export default function App() {
       if (successMsg) showToast(successMsg); 
     } catch (e) { 
       console.error("Firebase 執行錯誤:", e);
-      showToast(`操作失敗: ${e.message}`, "error"); 
+      if (e.message?.includes('undefined') || e.message?.includes('indexOf')) {
+         showToast("操作失敗：找不到該筆資料", "error"); 
+      } else if (e.code === 'permission-denied') {
+         showToast("權限不足：請檢查 Firebase 資料庫的 Rules", "error");
+      } else {
+         showToast(`操作失敗: ${e.message}`, "error"); 
+      }
     } finally {
       updateUi({ modal: null, confirm: null, selectedTx: null }); 
     }
@@ -305,8 +312,8 @@ export default function App() {
 
   // 🤖 AI 顧問呼叫 (完美使用 API Key 放置於 URL 避免 CORS 預檢問題)
   const handleCallAI = async () => {
-    if (!apiKey) {
-      showToast("系統未設定 API 金鑰，請於程式碼補上", "error");
+    if (!apiKey || apiKey.includes("請在此貼上")) {
+      showToast("系統未設定 API 金鑰！請確認您已貼入新金鑰", "error");
       return;
     }
     setIsAiLoading(true); setAiAnalysis('');
@@ -315,6 +322,7 @@ export default function App() {
       let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老公需給老婆${Math.round(settlement.amt)}` : `老婆需給老公${Math.round(settlement.amt)}`);
       const prompt = `這是家庭帳本本月紀錄：支出${tStats.exp}元。前三花費:${topCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
       
+      // 🌟 解決 401: 使用 gemini-1.5-flash，並把 key 放網址。絕對不使用自訂 Header 避免被瀏覽器 CORS 阻擋。
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
       const options = {
         method: 'POST',
@@ -324,7 +332,7 @@ export default function App() {
 
       const resData = await fetchWithBackoff(url, options);
       
-      if (!resData || !resData.candidates) throw new Error("API 回傳格式錯誤或遭拒絕 (可能為金鑰權限問題)");
+      if (!resData || !resData.candidates) throw new Error("API 回傳異常，請確認金鑰是否為無需權限的 API Key");
       setAiAnalysis(resData.candidates[0].content.parts[0].text);
     } catch (err) { 
       setAiAnalysis(`AI 服務連線異常：${err.message}`); 
@@ -391,6 +399,7 @@ export default function App() {
      }
   }
 
+  // 🛡️ 防護白畫面的安全開啟表單函數
   const handleOpenTx = (tx = null) => {
     try {
       updateUi({ modal: 'tx', selectedTx: tx });
@@ -903,7 +912,7 @@ export default function App() {
                 {/* 彈窗渲染 */}
                 {ui.modal === 'tx' && (
                   <TxForm 
-                    accounts={data.accounts} cats={CATEGORIES.family} tags={data.tags} initialData={ui.selectedTx} 
+                    accounts={data.accounts} cats={CATEGORIES} tags={data.tags} initialData={ui.selectedTx} 
                     templates={data.templates} settings={settings}
                     onAI={() => updateUi({ modal: 'ai' })} onAddTag={handleAddGlobalTag}
                     onSaveTemplate={(tpl) => doAction(() => addDoc(getCol('shared_templates'), {...tpl, createdAt: serverTimestamp()}), '範本已儲存')}
@@ -928,7 +937,7 @@ export default function App() {
                   />
                 )}
                 {ui.modal === 'ai' && (
-                  <AIForm cats={CATEGORIES.family} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} onSave={(txData) => doAction(() => addDoc(getCol('shared_ledger'), {...txData, date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date), createdAt: serverTimestamp(), createdBy: user ? user.uid : 'unknown'}), 'AI 記帳成功')} showToast={showToast} t={t} ui={ui} />
+                  <AIForm cats={CATEGORIES} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} onSave={(txData) => doAction(() => addDoc(getCol('shared_ledger'), {...txData, date: getLocalYYYYMMDD(ui.date), month: getLocalYYYYMM(ui.date), createdAt: serverTimestamp(), createdBy: user ? user.uid : 'unknown'}), 'AI 記帳成功')} showToast={showToast} t={t} ui={ui} />
                 )}
                 {ui.modal === 'date' && (
                   <div className="grid grid-cols-3 gap-3">
@@ -951,7 +960,7 @@ export default function App() {
                   />
                 )}
                 {ui.modal === 'barcode' && (
-                  <BarcodeForm codes={{h:settings.husbandBarcode, hC:settings.husbandCert, w:settings.wifeBarcode, wC:settings.wifeCert}} onSave={(h,hC,w,wC) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), {husbandBarcode:h, husbandCert:hC, wifeBarcode:w, wifeCert:wC}, {merge:true}), '載具已儲存')} t={t} />
+                  <BarcodeForm codes={{h:settings.husbandBarcode, w:settings.wifeBarcode}} onSave={(h,w) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), {husbandBarcode:h, wifeBarcode:w}, {merge:true}), '載具已儲存')} t={t} />
                 )}
                 
                 {/* 🌟 完美的推播與通知面板 (新增消掉按鈕 X) */}
@@ -1037,7 +1046,7 @@ export default function App() {
 // 4. 獨立子組件庫 (Forms & Modals)
 // ==========================================
 
-// 🌟 記帳表單 (含真四則運算 4x4 計算機 與 一鍵範本)
+// 🌟 記帳表單 (含真四則運算 4x4 計算機 與 一鍵範本，視覺鎖定防呆)
 const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, t, ui }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, type: initialData?.type || 'expense', category: initialData?.category || cats.expense[0].name, 
@@ -1097,7 +1106,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
   // 📸 OCR 拍照辨識
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file || !apiKey) return alert(apiKey ? "無法讀取照片" : "請先設定 API 金鑰");
+    if (!file || !apiKey || apiKey.includes("請在此貼上")) return alert(apiKey && !apiKey.includes("請在此貼上") ? "無法讀取照片" : "請先設定正確的 API 金鑰");
     
     setIsOCR(true);
     try {
@@ -1106,6 +1115,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       reader.onload = async () => {
         const base64Data = reader.result.split(',')[1];
         
+        // 🌟 OCR 也使用 URL ?key= 避免 CORS
         const resData = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1128,7 +1138,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       };
     } catch (err) {
       console.error(err);
-      alert("照片解析失敗");
+      alert("照片解析失敗，可能為金鑰權限問題");
       setIsOCR(false);
     }
   };
@@ -1319,7 +1329,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
   };
   
   const handleParse = async () => {
-    if (!apiKey || apiKey.includes("請把AIzaSy")) {
+    if (!apiKey || apiKey.includes("請在此貼上")) {
       showToast("系統未設定 API 金鑰，無法啟用 AI 服務", "error");
       return;
     }
@@ -1338,7 +1348,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
 
        const resData = await fetchWithBackoff(url, options);
        
-       if(!resData || !resData.candidates || !resData.candidates[0]) throw new Error("API 回傳異常，請檢查金鑰");
+       if(!resData || !resData.candidates || !resData.candidates[0]) throw new Error("API 回傳異常，請檢查金鑰權限");
        
        const rawText = resData.candidates[0].content.parts[0].text;
        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
@@ -1458,7 +1468,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
 };
 
 // ==========================================
-// 🌟 實體條碼展示與載具設定表單
+// 🌟 實體條碼展示與載具設定表單 (移除密碼，純淨展示)
 // ==========================================
 const BarcodeDisplay = ({ code, t }) => {
   const safeCode = code ? encodeURIComponent(code) : '';
@@ -1482,8 +1492,8 @@ const BarcodeDisplay = ({ code, t }) => {
 
 const BarcodeForm = ({ codes, onSave, t }) => {
   const [tab, setTab] = useState('h');
-  const [h, setH] = useState(codes.h || ''); const [hC, setHC] = useState(codes.hC || ''); 
-  const [w, setW] = useState(codes.w || ''); const [wC, setWC] = useState(codes.wC || '');
+  const [h, setH] = useState(codes.h || '');  
+  const [w, setW] = useState(codes.w || ''); 
   const [mode, setMode] = useState('view'); 
   
   return (
@@ -1497,7 +1507,7 @@ const BarcodeForm = ({ codes, onSave, t }) => {
         <div className={`p-5 rounded-3xl ${t.bg} space-y-4`}>
           <BarcodeDisplay code={tab === 'h' ? h : w} t={t} />
           <button onClick={() => setMode('edit')} className={`w-full py-4 rounded-xl font-bold text-sm border ${t.border} ${t.cardInner} ${t.text} shadow-sm active:scale-95`}>
-            修改條碼與密碼
+            設定 / 修改條碼
           </button>
         </div>
       ) : (
@@ -1506,11 +1516,7 @@ const BarcodeForm = ({ codes, onSave, t }) => {
             <label className={`text-xs font-bold ${t.textM} px-1`}>{tab === 'h' ? '老公' : '老婆'} 手機條碼</label>
             <input value={tab === 'h' ? h : w} onChange={e => tab === 'h' ? setH(e.target.value.toUpperCase()) : setW(e.target.value.toUpperCase())} className={`w-full p-4 rounded-xl uppercase font-mono text-base font-bold ${t.cardInner} border ${t.border} shadow-sm outline-none focus:ring-2 ${t.ring}`} placeholder="/..." />
           </div>
-          <div className="space-y-2">
-            <label className={`text-xs font-bold ${t.textM} px-1`}>驗證碼 (密碼)</label>
-            <input type="password" value={tab === 'h' ? hC : wC} onChange={e => tab === 'h' ? setHC(e.target.value) : setWC(e.target.value)} className={`w-full p-4 rounded-xl font-bold text-base ${t.cardInner} border ${t.border} shadow-sm outline-none focus:ring-2 ${t.ring}`} placeholder="設定後可於結帳時出示" />
-          </div>
-          <button onClick={() => { onSave(h, hC, w, wC); setMode('view'); }} className={`w-full py-4 rounded-xl font-bold text-base text-white shadow-md ${t.primary} mt-2 active:scale-95`}>儲存設定</button>
+          <button onClick={() => { onSave(h, '', w, ''); setMode('view'); }} className={`w-full py-4 rounded-xl font-bold text-base text-white shadow-md ${t.primary} mt-2 active:scale-95`}>儲存設定</button>
         </div>
       )}
     </div>
@@ -1572,15 +1578,6 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
         <div className="space-y-6 flex-1">
           <input value={r.name} onChange={e => setR({ ...r, name: e.target.value })} placeholder="規則名稱 (如: 每月房租)" className={`w-full p-5 rounded-2xl font-bold text-xl ${t.bg} border-none outline-none`} />
           <div className="space-y-3">
-            <label className={`font-bold text-sm ${t.textM} px-1`}>寫入哪個帳本？</label>
-            <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg}`}>
-              {['family:家庭', 'studio:工作室'].map(i => { 
-                const [k, l] = i.split(':'); 
-                return <button key={k} onClick={() => setR({ ...r, workspace: k })} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${r.workspace === k ? `${t.cardInner} shadow-sm` : t.textM}`}>{l}</button> 
-              })}
-            </div>
-          </div>
-          <div className="space-y-3">
             <label className={`font-bold text-sm ${t.textM} px-1`}>多久發生一次？</label>
             <div className="flex gap-4 items-center">
               <span className="font-bold text-lg px-2">每</span>
@@ -1601,7 +1598,7 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
         <div className="space-y-5 flex-1 flex flex-col">
           <p className={`font-bold text-xs ${t.textM} px-1`}>設定時間到了要自動記下的內容：</p>
           <TxForm 
-            accounts={accounts} cats={cats[r.workspace]} tags={[]} initialData={null} templates={[]} settings={{}}
+            accounts={accounts} cats={cats.family} tags={[]} initialData={null} templates={[]} settings={{}}
             onAI={() => { alert('自動化規則請手動設定內容喔！') }} onAddTag={() => {}} onSaveTemplate={() => {}} onDeleteTemplate={() => {}}
             onSave={(txData) => { setR({ ...r, txData }); setStep(3); }} t={t} ui={{isDark: t.bg.includes('0F')}}
           />
