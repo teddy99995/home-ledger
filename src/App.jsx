@@ -3,7 +3,7 @@ import {
   Plus, X, Trash2, Sparkles, ChevronLeft, ChevronRight, Target, Coins, 
   PieChart as PieChartIcon, ArrowRightLeft, Home, Search, Settings, CheckCircle2, AlertTriangle,
   Barcode, Camera, ClipboardList, StickyNote, Edit3, CalendarHeart, Mic, MicOff,
-  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane, ArrowRight, Tag, ReceiptText, Keyboard, Calendar, TrendingUp, TrendingDown
+  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane, ArrowRight, Tag, ReceiptText, Keyboard, Calendar, TrendingUp, TrendingDown, Globe
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -28,20 +28,29 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 🤖 安全讀取 API Key
 const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || 
                (typeof process !== 'undefined' && process.env?.REACT_APP_GEMINI_API_KEY) || 
                ""; 
 
-// 🌟 純家庭帳本分類設定
+// 🌟 純家庭帳本分類設定 (加入飲料與電話費)
 const CATEGORIES = {
   expense: [
-    { name: '餐飲', icon: '🍽️' },{ name: '飲料', icon: '🧋' }, { name: '購物', icon: '🛍️' }, { name: '電話費', icon: '📱' },
-    { name: '居家', icon: '🏠' }, { name: '娛樂', icon: '🍿' }, { name: '交通', icon: '🚗' },
-    { name: '教育', icon: '📚' },  { name: '醫療', icon: '💊' }, { name: '其他', icon: '✨' }
+    { name: '餐飲', icon: '🍽️', color: '#D4A373' }, 
+    { name: '飲料', icon: '🧋', color: '#E9C46A' }, 
+    { name: '購物', icon: '🛍️', color: '#F4A261' }, 
+    { name: '電話費', icon: '📱', color: '#2A9D8F' }, 
+    { name: '居家', icon: '🏠', color: '#CCD5AE' }, 
+    { name: '娛樂', icon: '🍿', color: '#E76F51' }, 
+    { name: '交通', icon: '🚗', color: '#A3B18A' }, 
+    { name: '教育', icon: '📚', color: '#264653' }, 
+    { name: '醫療', icon: '💊', color: '#E07A5F' }, 
+    { name: '其他', icon: '✨', color: '#EAE0D5' }
   ],
   income: [ 
-    { name: '薪資', icon: '💰' }, { name: '投資', icon: '📈' }, { name: '獎金', icon: '🎁' }, { name: '其他', icon: '✨' } 
+    { name: '薪資', icon: '💰', color: '#A3B18A' }, 
+    { name: '投資', icon: '📈', color: '#D4A373' }, 
+    { name: '獎金', icon: '🎁', color: '#F4A261' }, 
+    { name: '其他', icon: '✨', color: '#EAE0D5' } 
   ]
 };
 
@@ -50,7 +59,6 @@ const getLocalYYYYMMDD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).p
 const getLocalHHmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 const calculateDaysDiff = (target) => Math.ceil((new Date(target).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
 
-// 🔥 智慧資料庫路徑設計 (純家庭，無 Workspace)
 const isCanvas = typeof __app_id !== 'undefined';
 const safeAppId = isCanvas ? String(__app_id) : ''; 
 
@@ -67,9 +75,6 @@ const getDocRef = (colName, docId) => {
     : doc(db, String(colName), String(docId)); 
 };
 
-// ==========================================
-// 🛡️ API 防護網 (包含錯誤攔截)
-// ==========================================
 const fetchWithBackoff = async (url, options, retries = 3) => {
   const delays = [1000, 2000, 4000];
   for (let i = 0; i < retries; i++) {
@@ -87,9 +92,6 @@ const fetchWithBackoff = async (url, options, retries = 3) => {
   }
 };
 
-// ==========================================
-// 🎨 UI 元件：高質感 Switch 切換開關
-// ==========================================
 const ToggleSwitch = ({ checked, onChange, isDark }) => (
   <div 
     onClick={() => onChange(!checked)} 
@@ -99,12 +101,8 @@ const ToggleSwitch = ({ checked, onChange, isDark }) => (
   </div>
 );
 
-// 下拉箭頭專用
 const ArrowDownIconSVG = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 5v14M19 12l-7 7-7-7"/></svg>;
 
-// ==========================================
-// 2. 主程式 App Component
-// ==========================================
 export default function App() {
   const [user, setUser] = useState(null);
   const [data, setData] = useState({ 
@@ -115,17 +113,15 @@ export default function App() {
     monthlyBudget: 50000, husbandBarcode: '', wifeBarcode: '',
     enableRollover: true, notifyLargeExpense: true, largeExpenseThreshold: 3000, 
     notifyBillDue: true, notifyEvents: true, notifyAdvanceDays: 3,
-    travelMode: false, travelCurrency: 'JPY', travelRate: 0.21,
+    travelMode: false, travelCurrencies: [], 
     uiFontSize: 'md' 
   });
   
-  // 🌟 從手機本地記憶讀取個人主題偏好 (老公暗色/老婆亮色互不干擾)
   const [ui, setUi] = useState(() => {
-    const savedTheme = localStorage.getItem('app_theme');
-    const isDark = savedTheme !== null ? savedTheme === 'dark' : true;
-    return { 
-      date: new Date(), tab: 'home', subTab: 'bills', statsView: 'month', modal: null, search: '', filterTags: [], filterAccount: 'all', 
-      isDark: isDark, confirm: null, selectedItem: null, toast: null, selectedTx: null 
+    const savedIsDark = localStorage.getItem('homeLedgerTheme') !== 'light';
+    return {
+      date: new Date(), tab: 'home', subTab: 'bills', statsView: 'month', chartView: 'expense', modal: null, search: '', filterTags: [], filterAccount: 'all',
+      isDark: savedIsDark, confirm: null, selectedItem: null, toast: null, selectedTx: null
     };
   });
   
@@ -134,7 +130,16 @@ export default function App() {
   const [aiAnalysis, setAiAnalysis] = useState('');
   const processedRecurring = useRef(false);
 
-  const updateUi = (updates) => setUi(prev => ({ ...prev, ...updates }));
+  const updateUi = (updates) => {
+    setUi(prev => {
+      const next = { ...prev, ...updates };
+      if (updates.hasOwnProperty('isDark')) {
+        localStorage.setItem('homeLedgerTheme', updates.isDark ? 'dark' : 'light');
+      }
+      return next;
+    });
+  };
+  
   const showToast = (msg, type = 'success') => { 
     updateUi({ toast: { msg, type } }); 
     setTimeout(() => updateUi({ toast: null }), 4000); 
@@ -165,7 +170,6 @@ export default function App() {
     return onAuthStateChanged(auth, setUser);
   }, []);
 
-  // 資料監聽
   useEffect(() => {
     if (!user) return;
     const unsubs = [
@@ -182,7 +186,13 @@ export default function App() {
         }
       }),
       onSnapshot(getDocRef('shared_settings', 'main'), doc => { 
-        if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() })); 
+        if (doc.exists()) {
+          const d = doc.data();
+          if (!d.travelCurrencies && d.travelCurrency) {
+            d.travelCurrencies = [{code: d.travelCurrency, rate: d.travelRate || 1}];
+          }
+          setSettings(prev => ({ ...prev, ...d })); 
+        }
       }),
       onSnapshot(getDocRef('shared_tags', 'main'), doc => {
         setData(prev => ({ ...prev, tags: doc.exists() ? doc.data().tags : [] }))
@@ -221,24 +231,38 @@ export default function App() {
     return () => unsubs.forEach(u => u());
   }, [user]);
 
-  // 週期性記帳引擎
   useEffect(() => {
     if (!user || data.recurringRules.length === 0 || processedRecurring.current) return;
     const processRules = async () => {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const today = new Date(); 
+      today.setHours(0, 0, 0, 0);
       let processedCount = 0;
+
       for (const rule of data.recurringRules) {
         if (!rule.nextDueDate) continue;
-        const dueDate = rule.nextDueDate.toDate(); dueDate.setHours(0, 0, 0, 0);
+        const dueDate = rule.nextDueDate.toDate(); 
+        dueDate.setHours(0, 0, 0, 0);
+
         if (dueDate <= today) {
           const newTx = { 
-            ...rule.txData, date: getLocalYYYYMMDD(dueDate), month: getLocalYYYYMM(dueDate), 
-            recordTime: "08:00", createdAt: serverTimestamp(), createdBy: user.uid, tags: [...(rule.txData.tags || []), '週期性'] 
+            ...rule.txData, 
+            date: getLocalYYYYMMDD(dueDate), 
+            month: getLocalYYYYMM(dueDate), 
+            recordTime: "08:00", 
+            createdAt: serverTimestamp(), 
+            createdBy: user.uid, 
+            tags: [...(rule.txData.tags || []), '週期性'] 
           };
+          
           await addDoc(getCol('shared_ledger'), newTx);
+          
           const next = new Date(dueDate);
-          if (rule.frequency === 'monthly') next.setMonth(next.getMonth() + rule.interval);
-          else if (rule.frequency === 'weekly') next.setDate(next.getDate() + rule.interval * 7);
+          if (rule.frequency === 'monthly') {
+            next.setMonth(next.getMonth() + rule.interval);
+          } else if (rule.frequency === 'weekly') {
+            next.setDate(next.getDate() + rule.interval * 7);
+          }
+          
           await updateDoc(getDocRef('recurring_rules', rule.id), { nextDueDate: next });
           processedCount++;
         }
@@ -254,7 +278,6 @@ export default function App() {
   const mTx = useMemo(() => data.tx.filter(t => t.month === cMonth), [data.tx, cMonth]);
   const yTx = useMemo(() => data.tx.filter(t => t.date.startsWith(cYear)), [data.tx, cYear]);
   
-  // 🌟 核心過濾邏輯：依照帳戶過濾
   const filteredMTx = useMemo(() => {
     if (!ui.filterAccount || ui.filterAccount === 'all') return mTx;
     return mTx.filter(t => t.accountId === ui.filterAccount);
@@ -271,7 +294,6 @@ export default function App() {
     return q && tg;
   }), [filteredMTx, ui.search, ui.filterTags]);
 
-  // 🌟 統計計算邏輯 (支援收入與支出的分類獨立計算)
   const calcStats = (txs) => txs.reduce((s, t) => {
     if (t.type === 'transfer') return s;
     if (t.type === 'expense') {
@@ -287,7 +309,6 @@ export default function App() {
   const hStats = calcStats(filteredMTx); 
   const tStats = calcStats(ui.statsView === 'month' ? filteredMTx : filteredYTx); 
 
-  // 動態切換圓餅圖下方要顯示的清單 (收入或支出)
   const chartData = useMemo(() => {
     const isExp = ui.chartView === 'expense';
     const targetTotal = isExp ? tStats.exp : tStats.inc;
@@ -302,7 +323,6 @@ export default function App() {
     }).sort((a, b) => b.value - a.value);
   }, [tStats, ui.chartView]);
 
-  // 預算結轉永遠使用全域資料
   const rollover = useMemo(() => {
     if (!settings.enableRollover) return { enabled: false, amt: 0, budget: settings.monthlyBudget };
     const pMonth = getLocalYYYYMM(new Date(ui.date.getFullYear(), ui.date.getMonth() - 1, 1));
@@ -325,29 +345,64 @@ export default function App() {
   }, {});
   const totalAssets = Object.values(accBal).reduce((s, b) => s + b, 0);
 
-  // 結算邏輯永遠使用全域未過濾的資料
   const settlement = useMemo(() => {
     const activeTxs = ui.statsView === 'month' ? mTx : yTx; 
-    let hOwesW = 0; let wOwesH = 0; 
+    let hOwesW = 0; 
+    let wOwesH = 0; 
+
     activeTxs.forEach(t => {
-      if (t.type !== 'expense' || t.split === 'none') return;
-      if (t.payer === 'husband') wOwesH += (t.amount / 2);
-      else if (t.payer === 'wife') hOwesW += (t.amount / 2);
+      if (t.type !== 'expense') return;
+      if (t.split === 'none') return; 
+      
+      let ratioH = 0.5;
+      let ratioW = 0.5;
+      
+      if (t.split === 'custom' && t.splitRatio) {
+         ratioH = t.splitRatio.h / 100;
+         ratioW = t.splitRatio.w / 100;
+      }
+
+      if (t.payer === 'husband') wOwesH += (t.amount * ratioW);
+      else if (t.payer === 'wife') hOwesW += (t.amount * ratioH);
     });
+
     const netWifeOwesHusband = wOwesH - hOwesW;
+
     if (netWifeOwesHusband > 0.01) return { status: 'unsettled', who: 'wife', to: 'husband', amt: netWifeOwesHusband };
     if (netWifeOwesHusband < -0.01) return { status: 'unsettled', who: 'husband', to: 'wife', amt: Math.abs(netWifeOwesHusband) };
     return { status: 'settled' };
   }, [mTx, yTx, ui.statsView]);
 
-  // 🔔 系統通知
   const rawAlerts = useMemo(() => {
     const a = []; 
     const today = new Date().getDate(); 
     const notifyDays = settings.notifyAdvanceDays || 3;
-    if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期` }); });
-    if (settings.notifyEvents) data.events.forEach(e => { const d = calculateDaysDiff(e.date); if (d >= 0 && d <= notifyDays) a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天` }); });
-    if (settings.notifyLargeExpense) mTx.slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}` }); });
+    
+    if (settings.notifyBillDue) {
+      data.bills.forEach(b => { 
+        if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) {
+          a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期` }); 
+        }
+      });
+    }
+    
+    if (settings.notifyEvents) {
+      data.events.forEach(e => { 
+        const d = calculateDaysDiff(e.date); 
+        if (d >= 0 && d <= notifyDays) {
+          a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天` }); 
+        }
+      });
+    }
+
+    if (settings.notifyLargeExpense) {
+      mTx.slice(0, 15).forEach(t => { 
+        if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) {
+          a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}` }); 
+        }
+      });
+    }
+
     return a;
   }, [data, settings, mTx]);
 
@@ -371,7 +426,6 @@ export default function App() {
     try { await setDoc(getDocRef('shared_tags', 'main'), { tags: arrayUnion(tagName) }, { merge: true }); showToast(`標籤 #${tagName} 已建立`); } catch (err) {}
   };
 
-  // 🤖 AI 顧問呼叫
   const handleCallAI = async () => {
     if (!apiKey) return showToast("系統未設定 API 金鑰！請在 Vercel 設定 VITE_GEMINI_API_KEY", "error");
     setIsAiLoading(true); setAiAnalysis('');
@@ -392,7 +446,6 @@ export default function App() {
     } catch (err) { setAiAnalysis(`AI 服務連線異常：${err.message}`); } finally { setIsAiLoading(false); }
   };
 
-  // 匯出 CSV 
   const handleExportToSheets = () => {
     if (data.tx.length === 0) return showToast("目前沒有資料可以匯出喔！", "error"); 
     const BOM = "\uFEFF"; 
@@ -402,7 +455,7 @@ export default function App() {
       const catOrFrom = tx.type === 'transfer' ? data.accounts.find(a => a.id === tx.fromAccountId)?.name : tx.category;
       const accOrTo = tx.type === 'transfer' ? data.accounts.find(a => a.id === tx.toAccountId)?.name : data.accounts.find(a => a.id === tx.accountId)?.name;
       const payerLabel = tx.payer === 'husband' ? '老公' : tx.payer === 'wife' ? '老婆' : '共同';
-      const splitLabel = tx.type === 'expense' ? (tx.split === 'none' ? '不平分' : '平分') : '-';
+      const splitLabel = tx.type === 'expense' ? (tx.split === 'none' ? '不平分' : (tx.split === 'custom' ? `男${tx.splitRatio?.h}女${tx.splitRatio?.w}` : '平分')) : '-';
       return [tx.date, tx.recordTime || '', typeLabel, catOrFrom || '', accOrTo || '', tx.amount, `"${tx.note || ''}"`, payerLabel, splitLabel, tx.tags ? `"${tx.tags.join(';')}"` : ''].join(",");
     });
     
@@ -414,9 +467,7 @@ export default function App() {
     showToast("匯出成功！請直接匯入 Google Sheets");
   };
 
-  // ==========================================
   // 🌞 🌙 日夜與旅遊雙生主題引擎 
-  // ==========================================
   let t = ui.isDark ? { 
     bg: 'bg-[#0F172A]', cardInner: 'bg-[#1E293B]', text: 'text-[#F8FAFC]', textM: 'text-[#94A3B8]', primary: 'bg-[#4F46E5]', primaryText: 'text-[#818CF8]', border: 'border-[#334155]', input: 'bg-[#0F172A] text-white', ring: 'focus:ring-indigo-500'
   } : {
@@ -443,6 +494,8 @@ export default function App() {
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         body { background-color: ${settings.travelMode ? (ui.isDark ? '#001f3f' : '#e0f7fa') : (ui.isDark ? '#0F172A' : '#FAF9F6')}; margin: 0; padding: 0; transition: background-color 0.5s ease; }
         .donut-ring { stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: 2px solid #6366F1; margin-top: -8px; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 8px; cursor: pointer; background: #334155; border-radius: 4px; }
       `}} />
 
       <div className={`min-h-[100dvh] w-full flex justify-center ${t.bg} transition-colors duration-500 overflow-x-hidden font-sans`}>
@@ -475,18 +528,13 @@ export default function App() {
           {/* 🌟 頂部 Header */}
           <header className={`px-6 pt-safe pb-4 flex justify-between items-center ${t.cardInner} z-10 shrink-0`}>
             <div className="flex gap-3 w-24">
-               <button onClick={() => { 
-                 const nextDark = !ui.isDark; 
-                 localStorage.setItem('app_theme', nextDark ? 'dark' : 'light'); 
-                 updateUi({ isDark: nextDark }); 
-               }} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform`}>
+               <button onClick={() => updateUi({ isDark: !ui.isDark })} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform`}>
                  {ui.isDark ? <Sun className="w-5 h-5"/> : <Moon className="w-5 h-5"/>}
                </button>
                <button onClick={() => updateUi({ modal: 'settings' })} className={`p-3 rounded-full border ${t.border} ${t.bg} active:scale-95 transition-transform`}>
                  <Settings className="w-5 h-5"/>
                </button>
             </div>
-            
             <div className="flex-1 text-center">
               <h1 className="text-2xl font-black tracking-wide flex items-center justify-center gap-1.5">
                 {settings.travelMode && <Plane className="w-5 h-5 text-[#0074D9]" />} 
@@ -546,7 +594,7 @@ export default function App() {
                     </h2>
                   </div>
                   
-                  {/* 預算結轉 (如果選擇特定帳戶，則隱藏預算區塊避免混淆) */}
+                  {/* 預算結轉 */}
                   {rollover.enabled && !settings.travelMode && (!ui.filterAccount || ui.filterAccount === 'all') && (
                     <div className={`mt-6 pt-5 border-t ${t.border}`}>
                        <div className="flex items-center gap-2 mb-3">
@@ -617,7 +665,7 @@ export default function App() {
                                 <span className={`text-xs px-2.5 py-1 rounded-lg font-bold ${t.bg} ${t.textM}`}>
                                   {tx.type === 'expense' ? '付:' : '收:'}
                                   {tx.payer==='husband' ? '老公' : tx.payer==='wife' ? '老婆' : '共同'}
-                                  {tx.type === 'expense' ? (tx.split === 'none' ? ' (不平分)' : ' (平分)') : ''}
+                                  {tx.type === 'expense' ? (tx.split === 'none' ? ' (不平分)' : (tx.split === 'custom' && tx.splitRatio ? ` (👨${tx.splitRatio.h}% 👩${tx.splitRatio.w}%)` : ' (平分)')) : ''}
                                 </span>
                               )}
                               {/* 🌟 顯示日期與時間 */}
@@ -1000,7 +1048,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* ================= 彈出視窗 (Modals) ================= */}
+          {/* ================= 彈出視窗 (Modals) Wrapper ================= */}
           {ui.modal && (
             <div className="fixed inset-0 z-[50] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in">
               <div className={`w-full max-w-md md:max-w-xl ${t.cardInner} rounded-t-[2.5rem] sm:rounded-[2.5rem] pt-6 px-6 pb-0 border ${t.border} max-h-[95vh] flex flex-col shadow-2xl overflow-hidden`}>
@@ -1016,7 +1064,6 @@ export default function App() {
                   </button>
                 </div>
                 
-                {/* 彈窗內容區塊 */}
                 <div className="flex-1 overflow-y-auto hide-scrollbar pb-safe">
                   {ui.modal === 'tx' && (
                     <TxForm 
@@ -1076,7 +1123,6 @@ export default function App() {
                   {ui.modal === 'barcode' && (
                     <BarcodeForm codes={{h:settings.husbandBarcode, w:settings.wifeBarcode}} onSave={(h, w) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), {husbandBarcode:h, wifeBarcode:w}, {merge:true}), '載具已儲存')} t={t} />
                   )}
-                  
                   {ui.modal === 'notify' && (
                     <div className="space-y-4">
                       {activeAlerts.length === 0 ? (
@@ -1103,7 +1149,6 @@ export default function App() {
                       ))}
                     </div>
                   )}
-                  
                   {ui.modal === 'account' && (
                     <AccForm onSave={d => doAction(() => addDoc(getCol('shared_accounts'), {...d, createdAt: serverTimestamp()}), '帳戶建立')} t={t} />
                   )}
@@ -1160,14 +1205,18 @@ export default function App() {
 // 4. 獨立子組件庫 (Forms & Modals)
 // ==========================================
 
-// 🌟 記帳表單
+// 🌟 記帳表單 (旗艦升級：多幣別選擇 + 彈性比例拆帳)
 const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, t, ui }) => {
   const [data, setData] = useState({ 
-    id: initialData?.id || null, type: initialData?.type || 'expense', 
+    id: initialData?.id || null, 
+    type: initialData?.type || 'expense', 
     category: initialData?.category || cats.expense[0]?.name || '餐飲', 
-    accountId: initialData?.accountId || (accounts[0]?.id || ''), fromAccountId: initialData?.fromAccountId || (accounts[0]?.id || ''),
-    toAccountId: initialData?.toAccountId || (accounts[1]?.id || ''), amount: initialData ? String(initialData.amount) : '', 
-    note: initialData?.note || '', tags: initialData?.tags || [],
+    accountId: initialData?.accountId || (accounts[0]?.id || ''), 
+    fromAccountId: initialData?.fromAccountId || (accounts[0]?.id || ''),
+    toAccountId: initialData?.toAccountId || (accounts[1]?.id || ''), 
+    amount: initialData ? String(initialData.amount) : '', 
+    note: initialData?.note || '', 
+    tags: initialData?.tags || [],
     recordDate: initialData?.date || getLocalYYYYMMDD(new Date()),
     recordTime: initialData?.recordTime || getLocalHHmm(new Date())
   });
@@ -1201,6 +1250,11 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
   };
   
   const [splitBill, setSplitBill] = useState(initialData ? (initialData.split !== 'none') : false);
+  const [splitRatio, setSplitRatio] = useState(initialData?.splitRatio?.h || 50);
+
+  const safeTravelCurrencies = settings.travelCurrencies || (settings.travelCurrency ? [{code: settings.travelCurrency, rate: settings.travelRate}] : []);
+  const [currency, setCurrency] = useState('TWD');
+
   const [showK, setShowK] = useState(true);
   const [newTag, setNewTag] = useState('');
   const [isOCR, setIsOCR] = useState(false);
@@ -1227,21 +1281,30 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
 
   const submit = () => { 
     let finalAmount = Number(evaluateMath(data.amount));
-    if (settings.travelMode && finalAmount > 0) {
-      finalAmount = Math.round(finalAmount * (settings.travelRate || 1));
-      data.note = `[${settings.travelCurrency} ${data.amount}] ${data.note}`;
+    
+    if (settings.travelMode && currency !== 'TWD' && finalAmount > 0) {
+      const c = safeTravelCurrencies.find(x => x.code === currency);
+      if (c) {
+        finalAmount = Math.round(finalAmount * c.rate);
+        data.note = `[${c.code} ${data.amount}] ${data.note}`;
+      }
     }
+
     if (finalAmount > 0) {
       const acc = accounts.find(a => a.id === data.accountId);
       const autoPayer = acc ? acc.type : 'joint'; 
-      let autoSplit = splitBill ? (autoPayer === 'joint' ? 'joint' : 'half') : 'none';
-      onSave({...data, amount: finalAmount, payer: autoPayer, split: autoSplit}); 
+      let autoSplit = splitBill ? 'custom' : 'none';
+      let payloadSplitRatio = splitBill ? { h: splitRatio, w: 100 - splitRatio } : null;
+
+      onSave({...data, amount: finalAmount, payer: autoPayer, split: autoSplit, splitRatio: payloadSplitRatio}); 
     }
   };
   
   const handleAddNewTag = () => {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
-      onAddTag(newTag.trim()); setData(prev => ({ ...prev, tags: [...prev.tags, newTag.trim()] })); setNewTag('');
+      onAddTag(newTag.trim()); 
+      setData(prev => ({ ...prev, tags: [...prev.tags, newTag.trim()] })); 
+      setNewTag('');
     }
   };
 
@@ -1251,8 +1314,18 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
     if (name) {
       const acc = accounts.find(a => a.id === data.accountId);
       const autoPayer = acc ? acc.type : 'joint';
-      let autoSplit = splitBill ? (autoPayer === 'joint' ? 'joint' : 'half') : 'none';
-      onSaveTemplate({ name, txData: { ...data, amount: Number(evaluateMath(data.amount)), payer: autoPayer, split: autoSplit } });
+      let autoSplit = splitBill ? 'custom' : 'none';
+      let payloadSplitRatio = splitBill ? { h: splitRatio, w: 100 - splitRatio } : null;
+      onSaveTemplate({ 
+        name, 
+        txData: { 
+          ...data, 
+          amount: Number(evaluateMath(data.amount)), 
+          payer: autoPayer, 
+          split: autoSplit, 
+          splitRatio: payloadSplitRatio 
+        } 
+      });
     }
   };
 
@@ -1268,7 +1341,11 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         const base64Data = reader.result.split(',')[1];
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
         const options = {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
+          method: 'POST', 
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-goog-api-key': apiKey
+          },
           body: JSON.stringify({
             contents: [{ parts: [
               { text: `請分析這張收據/發票，並回傳 JSON 格式。包含：amount (數字，總金額), note (字串，商店名稱或購買品項)。若無法辨識則留空。` },
@@ -1287,13 +1364,17 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         setIsOCR(false);
       };
     } catch (err) {
-      console.error(err); alert(`照片解析失敗: ${err.message}`); setIsOCR(false);
+      console.error(err); 
+      alert(`照片解析失敗: ${err.message}`); 
+      setIsOCR(false);
     }
   };
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto space-y-4 px-1 pb-16 hide-scrollbar relative">
+        
+        {/* 一鍵記帳範本區 */}
         <div className="flex justify-between items-center mb-2">
            <div className="flex gap-2 overflow-x-auto hide-scrollbar py-1">
              <button onClick={handleSaveTemplate} className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-1.5 border-2 border-dashed ${t.border} rounded-xl text-xs font-bold ${t.textM} hover:${t.primaryText} transition-colors`}>
@@ -1301,8 +1382,12 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
              </button>
              {templates.map(tpl => (
                <div key={tpl.id} className={`relative flex items-center shrink-0 ${t.bg} border ${t.border} rounded-xl pl-3 pr-8 py-1.5 shadow-sm group`}>
-                  <span onClick={() => setData({ ...data, ...tpl.txData, amount: String(tpl.txData.amount) })} className={`font-bold text-sm cursor-pointer ${t.text}`}>{tpl.name}</span>
-                  <button onClick={() => onDeleteTemplate(tpl.id)} className="absolute right-2 text-stone-400 hover:text-red-500 transition-colors p-0.5"><X className="w-3.5 h-3.5" strokeWidth={3} /></button>
+                  <span onClick={() => setData({ ...data, ...tpl.txData, amount: String(tpl.txData.amount) })} className={`font-bold text-sm cursor-pointer ${t.text}`}>
+                    {tpl.name}
+                  </span>
+                  <button onClick={() => onDeleteTemplate(tpl.id)} className="absolute right-2 text-stone-400 hover:text-red-500 transition-colors p-0.5">
+                    <X className="w-3.5 h-3.5" strokeWidth={3} />
+                  </button>
                </div>
              ))}
            </div>
@@ -1350,51 +1435,134 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
           <div className="space-y-2">
             <label className={`font-bold text-xs ${t.textM} px-1`}>帳戶 (系統會自動判斷付款人)</label>
             <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1`}>
-               {accounts.map(a => <button key={a.id} onClick={() => setData({...data, accountId: a.id})} className={`shrink-0 px-5 py-3 font-bold text-sm rounded-xl transition-all ${data.accountId === a.id ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>{a.name}</button>)}
+               {accounts.map(a => (
+                 <button 
+                   key={a.id} 
+                   onClick={() => setData({...data, accountId: a.id})} 
+                   className={`shrink-0 px-5 py-3 font-bold text-sm rounded-xl transition-all ${data.accountId === a.id ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}
+                 >
+                   {a.name}
+                 </button>
+               ))}
             </div>
+            
+            {/* 🌟 彈性比例拆帳面板 */}
             {data.type === 'expense' && (
-              <div className={`flex justify-between items-center mt-3 px-2 py-1`}>
-                <span className={`text-sm font-bold ${t.text}`}>這筆花費要平分嗎？</span>
-                <ToggleSwitch checked={splitBill} onChange={setSplitBill} isDark={ui.isDark} />
+              <div className={`mt-3 px-4 py-4 rounded-2xl border ${t.border} ${t.bg} shadow-sm space-y-4`}>
+                <div className="flex justify-between items-center">
+                  <span className={`text-sm font-bold ${t.text}`}>這筆花費要平分嗎？</span>
+                  <ToggleSwitch checked={splitBill} onChange={setSplitBill} isDark={ui.isDark} />
+                </div>
+                {splitBill && (
+                  <div className={`pt-4 border-t ${t.border} space-y-3 animate-in fade-in slide-in-from-top-2`}>
+                     <div className="flex justify-between text-sm font-black">
+                       <span className={t.primaryText}>👨 老公負擔 {splitRatio}%</span>
+                       <span className="text-pink-500">👩 老婆負擔 {100 - splitRatio}%</span>
+                     </div>
+                     <input 
+                       type="range" 
+                       min="0" 
+                       max="100" 
+                       step="5" 
+                       value={splitRatio} 
+                       onChange={e => setSplitRatio(Number(e.target.value))} 
+                       className="w-full accent-indigo-500" 
+                     />
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
         
+        {/* 🌟 日期與時間選擇器 */}
         <div className="flex gap-3 relative">
           <div className="flex-1 space-y-2 relative">
             <label className={`font-bold text-xs ${t.textM} px-1`}>日期 (DD/MM/YYYY)</label>
             <div className="relative">
-              <input type="text" value={displayDate} onChange={handleDateType} placeholder="DD/MM/YYYY" maxLength={10} className={`w-full p-4 pr-12 rounded-xl ${t.bg} border-none font-bold text-sm outline-none focus:ring-2 ${t.ring}`} />
+              <input 
+                type="text" 
+                value={displayDate} 
+                onChange={handleDateType} 
+                placeholder="DD/MM/YYYY" 
+                maxLength={10} 
+                className={`w-full p-4 pr-12 rounded-xl ${t.bg} border-none font-bold text-sm outline-none focus:ring-2 ${t.ring}`} 
+              />
               <div className="absolute right-0 top-0 bottom-0 w-12 flex items-center justify-center overflow-hidden pointer-events-none">
                 <Calendar className={`w-5 h-5 ${t.textMuted}`} />
               </div>
-              <input type="date" value={data.recordDate} onChange={handleDateSelect} className="absolute right-0 top-0 w-12 h-full opacity-0 cursor-pointer" />
+              <input 
+                type="date" 
+                value={data.recordDate} 
+                onChange={handleDateSelect} 
+                className="absolute right-0 top-0 w-12 h-full opacity-0 cursor-pointer" 
+              />
             </div>
           </div>
           <div className="flex-1 space-y-2">
             <label className={`font-bold text-xs ${t.textM} px-1`}>時間</label>
-            <input type="time" value={data.recordTime} onChange={e => setData({...data, recordTime: e.target.value})} className={`w-full p-4 rounded-xl ${t.bg} border-none font-bold text-sm outline-none focus:ring-2 ${t.ring}`} />
+            <input 
+              type="time" 
+              value={data.recordTime} 
+              onChange={e => setData({...data, recordTime: e.target.value})} 
+              className={`w-full p-4 rounded-xl ${t.bg} border-none font-bold text-sm outline-none focus:ring-2 ${t.ring}`} 
+            />
           </div>
         </div>
 
+        {/* 🏷️ 標籤 (Tags) */}
         <div className="space-y-3">
           <div className="flex gap-3">
-            <input type="text" placeholder="新增標籤..." value={newTag} onChange={(e) => setNewTag(e.target.value)} className={`flex-1 p-4 rounded-xl ${t.bg} border-none font-bold text-sm outline-none focus:ring-2 ${t.ring}`} />
-            <button onClick={handleAddNewTag} disabled={!newTag.trim()} className={`px-5 rounded-xl ${t.primary} text-white font-bold text-sm disabled:opacity-50 shadow-sm active:scale-95`}>新增</button>
+            <input 
+              type="text" 
+              placeholder="新增標籤..." 
+              value={newTag} 
+              onChange={(e) => setNewTag(e.target.value)} 
+              className={`flex-1 p-4 rounded-xl ${t.bg} border-none font-bold text-sm outline-none focus:ring-2 ${t.ring}`} 
+            />
+            <button 
+              onClick={handleAddNewTag} 
+              disabled={!newTag.trim()} 
+              className={`px-5 rounded-xl ${t.primary} text-white font-bold text-sm disabled:opacity-50 shadow-sm active:scale-95`}
+            >
+              新增
+            </button>
           </div>
           <div className="flex flex-wrap gap-2">
             {tags.map(tg => (
-              <button key={tg} onClick={() => setData(prev => ({...prev, tags: prev.tags.includes(tg) ? prev.tags.filter(x=>x!==tg) : [...prev.tags, tg]}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${data.tags.includes(tg) ? `${t.primary} text-white border-transparent shadow-sm` : `${t.bg} ${t.border}`}`}>#{tg}</button>
+              <button 
+                key={tg} 
+                onClick={() => setData(prev => ({...prev, tags: prev.tags.includes(tg) ? prev.tags.filter(x=>x!==tg) : [...prev.tags, tg]}))} 
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${data.tags.includes(tg) ? `${t.primary} text-white border-transparent shadow-sm` : `${t.bg} ${t.border}`}`}
+              >
+                #{tg}
+              </button>
             ))}
           </div>
         </div>
 
+        {/* 📷 備註與相機 OCR */}
         <div className="flex gap-3 pb-8">
-          <input type="text" placeholder="備註..." value={data.note} onChange={e => setData({...data, note: e.target.value})} className={`flex-1 p-4 rounded-xl ${t.bg} border-none font-bold text-base outline-none focus:ring-2 ${t.ring}`} />
-          <button onClick={() => fileInputRef.current.click()} disabled={isOCR} className={`p-4 rounded-xl font-bold flex items-center justify-center active:scale-95 ${t.bg} border-none ${t.textM} relative shadow-sm`}>
+          <input 
+            type="text" 
+            placeholder="備註..." 
+            value={data.note} 
+            onChange={e => setData({...data, note: e.target.value})} 
+            className={`flex-1 p-4 rounded-xl ${t.bg} border-none font-bold text-base outline-none focus:ring-2 ${t.ring}`} 
+          />
+          <button 
+            onClick={() => fileInputRef.current.click()} 
+            disabled={isOCR} 
+            className={`p-4 rounded-xl font-bold flex items-center justify-center active:scale-95 ${t.bg} border-none ${t.textM} relative shadow-sm`}
+          >
             {isOCR ? <Loader2 className="animate-spin w-6 h-6" /> : <Camera className="w-6 h-6" />}
-            <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handlePhotoUpload} />
+            <input 
+              type="file" 
+              accept="image/*" 
+              ref={fileInputRef} 
+              className="hidden" 
+              onChange={handlePhotoUpload} 
+            />
           </button>
         </div>
       </div>
@@ -1405,11 +1573,38 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
          </button>
       </div>
       
+      {/* 🌟 下半部：永久鎖定在底部的「大金額顯示 + 4x4 計算機」 */}
       {showK && (
         <div className={`shrink-0 border-t ${t.border} pt-5 pb-safe bg-transparent shadow-[0_-4px_10px_rgba(0,0,0,0.02)] animate-in slide-in-from-bottom-2`}>
+          
+          {/* 🌟 旅遊外幣切換器 */}
+          {settings.travelMode && data.type === 'expense' && safeTravelCurrencies.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto hide-scrollbar px-4 mb-3">
+               <button 
+                 onClick={() => setCurrency('TWD')} 
+                 className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${currency === 'TWD' ? `${t.primary} text-white shadow-sm` : `${t.bg} ${t.textM} border ${t.border}`}`}
+               >
+                 TWD 台幣
+               </button>
+               {safeTravelCurrencies.map(c => (
+                 <button 
+                   key={c.code} 
+                   onClick={() => setCurrency(c.code)} 
+                   className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${currency === c.code ? `bg-[#0074D9] text-white shadow-sm` : `${t.bg} ${t.textM} border ${t.border}`}`}
+                 >
+                   {c.code}
+                 </button>
+               ))}
+            </div>
+          )}
+
           <div className={`flex justify-between items-center px-4 py-3 mx-2 mb-3 rounded-2xl ${ui.isDark ? 'bg-[#1E293B] shadow-inner' : 'bg-stone-50 border border-stone-200'}`}>
-            <span className={`font-bold text-sm ${t.textM}`}>{settings.travelMode ? `輸入 ${settings.travelCurrency}` : '輸入金額'}</span>
-            <span className={`text-4xl font-black ${t.text} truncate max-w-[200px] text-right`}>{data.amount || '0'}</span>
+            <span className={`font-bold text-sm ${currency !== 'TWD' ? 'text-[#0074D9]' : t.textM}`}>
+              {currency !== 'TWD' ? `輸入外幣 (${currency})` : '輸入金額'}
+            </span>
+            <span className={`text-4xl font-black ${currency !== 'TWD' ? 'text-[#0074D9]' : t.text} truncate max-w-[200px] text-right`}>
+              {data.amount || '0'}
+            </span>
           </div>
 
           <div className={`grid grid-cols-4 gap-2 px-2 pb-2`}>
@@ -1418,12 +1613,22 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
               const isC = k === 'C' || k === '⌫';
               let btnClass = '';
               if (ui.isDark) {
-                if (isOp) btnClass = 'bg-[#1E293B] text-rose-500'; else if (isC) btnClass = 'bg-[#1E293B] text-stone-400'; else btnClass = 'bg-[#111827] text-white shadow-sm'; 
+                if (isOp) btnClass = 'bg-[#1E293B] text-rose-500'; 
+                else if (isC) btnClass = 'bg-[#1E293B] text-stone-400'; 
+                else btnClass = 'bg-[#111827] text-white shadow-sm'; 
               } else {
-                if (isOp) btnClass = 'bg-stone-200 text-rose-500'; else if (isC) btnClass = 'bg-stone-300 text-stone-600'; else btnClass = 'bg-white text-stone-800 shadow-sm border border-stone-100'; 
+                if (isOp) btnClass = 'bg-stone-200 text-rose-500'; 
+                else if (isC) btnClass = 'bg-stone-300 text-stone-600'; 
+                else btnClass = 'bg-white text-stone-800 shadow-sm border border-stone-100'; 
               }
               return (
-                <button key={i} onClick={() => k === 'OK' ? submit() : handleKey(k)} className={`h-[56px] rounded-2xl font-black text-[22px] active:scale-95 transition-all ${k === 'OK' ? `col-span-1 ${t.primary} text-white shadow-md` : btnClass}`}>{k}</button>
+                <button 
+                  key={i} 
+                  onClick={() => k === 'OK' ? submit() : handleKey(k)} 
+                  className={`h-[56px] rounded-2xl font-black text-[22px] active:scale-95 transition-all ${k === 'OK' ? `col-span-1 ${t.primary} text-white shadow-md` : btnClass}`}
+                >
+                  {k}
+                </button>
               )
             })}
           </div>
@@ -1432,7 +1637,9 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
 
       {!showK && (
         <div className={`shrink-0 border-t ${t.border} pt-4 pb-safe px-2 bg-transparent animate-in slide-in-from-bottom-2`}>
-           <button onClick={submit} className={`w-full py-4 rounded-2xl font-black text-xl text-white shadow-md active:scale-95 ${ui.isDark ? t.primary : 'bg-[#A29188]'}`}>確認{initialData ? '修改' : '記帳'} (${data.amount || '0'})</button>
+           <button onClick={submit} className={`w-full py-4 rounded-2xl font-black text-xl text-white shadow-md active:scale-95 ${ui.isDark ? t.primary : 'bg-[#A29188]'}`}>
+             確認{initialData ? '修改' : '記帳'} ({currency !== 'TWD' ? currency : ''} {data.amount || '0'})
+           </button>
         </div>
       )}
     </div>
@@ -1476,7 +1683,11 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
     try {
        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
        const options = {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
+          method: 'POST', 
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-goog-api-key': apiKey
+          },
           body: JSON.stringify({ 
             contents: [{ parts: [{ text: `請將以下語言記帳轉換為JSON。語言：「${text}」。這是家庭帳本。必填欄位：amount(數字), category(從[${cats?.expense?.map(c=>c.name).join(',')}]選), type('expense'/'income'/'transfer'), accountId(請挑選最合理的帳戶 ID: [${accounts.map(a=>`${a.name}:${a.id}`).join(',')}]), note(備註)。若無法判斷則填預設值。` }] }]
           })
@@ -1495,7 +1706,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
 
        onSave({ 
          amount: result.amount || 0, category: result.category || cats?.expense?.[0]?.name, type: result.type || 'expense', 
-         accountId: acc.id, payer: autoPayer, split: autoSplit, note: result.note || '', tags: ['AI記帳'],
+         accountId: acc.id, payer: autoPayer, split: autoSplit, splitRatio: null, note: result.note || '', tags: ['AI記帳'],
          recordDate: getLocalYYYYMMDD(new Date()), recordTime: getLocalHHmm(new Date())
        });
     } catch (e) { showToast(`AI 解析失敗: ${e.message}`, "error"); } finally { setLoading(false); }
@@ -1505,45 +1716,77 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
     <div className="space-y-4 flex flex-col h-full">
       <button onClick={onBack} className={`text-sm font-bold ${t.textM} mb-2 flex items-center gap-1.5 shrink-0`}><ChevronLeft className="w-4 h-4"/> 返回手動記帳</button>
       <div className="relative flex-1">
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="點擊右下角麥克風說話，例如：「昨天去全聯買便當花了 200，老婆付的...」" className={`w-full h-full p-6 rounded-3xl font-bold text-xl resize-none focus:ring-2 ${t.ring} ${t.bg} border-none outline-none`} />
-        <button onClick={toggleListening} className={`absolute bottom-5 right-5 p-5 rounded-full shadow-2xl transition-transform ${isListening ? 'bg-rose-500 text-white animate-pulse scale-110' : `${t.primary} text-white hover:scale-105`}`}>
+        <textarea 
+          value={text} 
+          onChange={e => setText(e.target.value)} 
+          placeholder="點擊右下角麥克風說話，例如：「昨天去全聯買便當花了 200，老婆付的...」" 
+          className={`w-full h-full p-6 rounded-3xl font-bold text-xl resize-none focus:ring-2 ${t.ring} ${t.bg} border-none outline-none`} 
+        />
+        <button 
+          onClick={toggleListening} 
+          className={`absolute bottom-5 right-5 p-5 rounded-full shadow-2xl transition-transform ${isListening ? 'bg-rose-500 text-white animate-pulse scale-110' : `${t.primary} text-white hover:scale-105`}`}
+        >
           {isListening ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
         </button>
       </div>
-      <button onClick={handleParse} disabled={loading || !text} className={`w-full py-5 rounded-2xl font-black text-xl ${t.primary} text-white flex justify-center items-center gap-2 mt-3 shrink-0 shadow-lg disabled:opacity-50 active:scale-95`}>
+      <button 
+        onClick={handleParse} 
+        disabled={loading || !text} 
+        className={`w-full py-5 rounded-2xl font-black text-xl ${t.primary} text-white flex justify-center items-center gap-2 mt-3 shrink-0 shadow-lg disabled:opacity-50 active:scale-95`}
+      >
         {loading ? <Loader2 className="animate-spin w-6 h-6"/> : <Sparkles className="w-6 h-6"/>} 交給 AI 自動解析
       </button>
     </div>
   );
-}
+};
 
 // ==========================================
-// 其它表單設定
+// 高質感設定表單 (旗艦升級：多幣別陣列管理)
 // ==========================================
 const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
   const [s, setS] = useState(settings);
+  const [newCurr, setNewCurr] = useState('');
   const isDark = t.bg.includes('0F172A') || t.bg.includes('1E1B18') || t.bg.includes('001f3f'); 
 
-  const handleAutoFetchRate = async () => {
+  // 🌟 智慧外幣抓取邏輯 (陣列版)
+  const handleAddCurrency = async () => {
+    let targetCurrency = newCurr.trim().toUpperCase();
+    if (!targetCurrency) return;
+
     const currencyMap = {
       '日': 'JPY', 'jpy': 'JPY', '韓': 'KRW', 'krw': 'KRW', '美': 'USD', 'usd': 'USD', '歐': 'EUR', 'eur': 'EUR',
       '港': 'HKD', 'hkd': 'HKD', '泰': 'THB', 'thb': 'THB', '英': 'GBP', 'gbp': 'GBP', '澳': 'AUD', 'aud': 'AUD',
       '加': 'CAD', 'cad': 'CAD', '新': 'SGD', 'sgd': 'SGD', '馬': 'MYR', 'myr': 'MYR', '越': 'VND', 'vnd': 'VND',
       '印尼': 'IDR', 'idr': 'IDR', '人民幣': 'CNY', '中': 'CNY', 'cny': 'CNY', 'rmb': 'CNY'
     };
-    let targetCurrency = (s.travelCurrency || '').trim().toLowerCase();
-    for (const [key, value] of Object.entries(currencyMap)) { if (targetCurrency.includes(key)) { targetCurrency = value; break; } }
-    targetCurrency = targetCurrency.toUpperCase();
-    if (targetCurrency.length !== 3) return alert("請輸入正確的國家關鍵字或 3 碼幣別 (例如: 日本、泰國 或 JPY)");
-    setS({...s, travelCurrency: targetCurrency});
+    
+    for (const [key, value] of Object.entries(currencyMap)) { 
+      if (targetCurrency.includes(key)) { 
+        targetCurrency = value; 
+        break; 
+      } 
+    }
+    
+    if (targetCurrency.length !== 3) return alert("請輸入正確的國家關鍵字或 3 碼幣別 (例如: 日本 或 JPY)");
+    
+    // 檢查是否已存在
+    const currentList = s.travelCurrencies || [];
+    if (currentList.find(x => x.code === targetCurrency)) return alert(`${targetCurrency} 已經在列表裡囉！`);
+
     try {
       const res = await fetch(`https://open.er-api.com/v6/latest/${targetCurrency}`);
       const data = await res.json();
       if (data.result === 'success' && data.rates.TWD) {
-        setS(prev => ({...prev, travelRate: Number(data.rates.TWD.toFixed(4))}));
-        alert(`成功抓取即時匯率！\n1 ${targetCurrency} = ${data.rates.TWD.toFixed(4)} TWD`);
+        const rate = Number(data.rates.TWD.toFixed(4));
+        setS(prev => ({...prev, travelCurrencies: [...(prev.travelCurrencies||[]), {code: targetCurrency, rate}]}));
+        setNewCurr('');
+        alert(`新增成功！\n1 ${targetCurrency} = ${rate} TWD`);
       } else alert("找不到該幣別匯率，請手動輸入");
     } catch (e) { alert("抓取匯率失敗，請檢查網路"); }
+  };
+
+  const handleRemoveCurrency = (code) => {
+    setS(prev => ({...prev, travelCurrencies: (prev.travelCurrencies||[]).filter(x => x.code !== code)}));
   };
 
   return (
@@ -1560,25 +1803,52 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
          </div>
       </div>
 
+      {/* ✈️ 旅遊多幣別模式 (陣列版) */}
       <div className={`${t.bg} rounded-3xl p-5 border ${t.border} shadow-sm space-y-4`}>
          <div className="flex justify-between items-center">
-           <h4 className={`font-bold text-base flex items-center gap-2 ${s.travelMode ? 'text-[#0074D9]' : t.text}`}><Plane className="w-5 h-5"/> 旅遊模式 (多幣別)</h4>
+           <h4 className={`font-bold text-base flex items-center gap-2 ${s.travelMode ? 'text-[#0074D9]' : t.text}`}><Globe className="w-5 h-5"/> 多點跨國旅行模式</h4>
            <ToggleSwitch checked={s.travelMode} onChange={val => setS({...s, travelMode: val})} isDark={isDark} />
          </div>
          {s.travelMode && (
-           <div className={`space-y-3 pt-3 border-t ${t.border}`}>
-             <div className="flex justify-between items-center">
-               <span className={`text-sm font-bold ${t.textM}`}>記帳幣別</span>
-               <div className="flex gap-2">
-                 <input value={s.travelCurrency || 'JPY'} onChange={e => setS({...s, travelCurrency: e.target.value})} className={`w-20 ${t.cardInner} p-2 rounded-lg font-bold text-center border ${t.border} outline-none focus:ring-2 ${t.ring}`} placeholder="日本" />
-                 <button onClick={handleAutoFetchRate} className={`px-3 py-2 rounded-lg text-xs font-bold text-white bg-[#0074D9] active:scale-95 shadow-sm`}>自動抓取</button>
-               </div>
+           <div className={`space-y-4 pt-3 border-t ${t.border}`}>
+             <div className="flex gap-2">
+               <input 
+                 value={newCurr} 
+                 onChange={e => setNewCurr(e.target.value)} 
+                 className={`flex-1 ${t.cardInner} p-3 rounded-xl font-bold text-sm border ${t.border} outline-none focus:ring-2 ${t.ring}`} 
+                 placeholder="輸入國家或幣別 (如: 日本)" 
+               />
+               <button 
+                 onClick={handleAddCurrency} 
+                 disabled={!newCurr} 
+                 className={`px-5 rounded-xl text-sm font-bold text-white bg-[#0074D9] active:scale-95 shadow-sm disabled:opacity-50`}
+               >
+                 新增匯率
+               </button>
              </div>
-             <div className="flex justify-between items-center">
-               <span className={`text-sm font-bold ${t.textM}`}>對台幣匯率</span>
-               <input type="number" step="0.01" value={s.travelRate || 0.21} onChange={e => setS({...s, travelRate: Number(e.target.value)})} className={`w-24 ${t.cardInner} p-2 rounded-lg font-bold text-center border ${t.border} outline-none focus:ring-2 ${t.ring}`} />
+             
+             <div className="space-y-2">
+               {(s.travelCurrencies || []).map(c => (
+                 <div key={c.code} className={`flex justify-between items-center p-3 rounded-xl ${t.cardInner} border ${t.border}`}>
+                   <span className={`font-black text-sm text-[#0074D9] w-12`}>{c.code}</span>
+                   <div className="flex items-center gap-2">
+                     <span className={`text-xs ${t.textM}`}>對台幣</span>
+                     <input 
+                       type="number" 
+                       step="0.01" 
+                       value={c.rate} 
+                       onChange={e => {
+                          const newArr = s.travelCurrencies.map(x => x.code === c.code ? {...x, rate: Number(e.target.value)} : x);
+                          setS({...s, travelCurrencies: newArr});
+                       }} 
+                       className={`w-20 ${t.bg} p-1.5 rounded-lg font-bold text-center border-none outline-none`} 
+                     />
+                   </div>
+                   <button onClick={() => handleRemoveCurrency(c.code)} className={`text-stone-400 hover:text-red-500`}><X className="w-5 h-5"/></button>
+                 </div>
+               ))}
+               {(s.travelCurrencies || []).length === 0 && <p className={`text-center text-xs font-bold ${t.textM} py-2`}>尚未加入外幣</p>}
              </div>
-             <p className={`text-[10px] ${t.textM}`}>輸入國家名或代碼(如:日本或JPY)，點擊自動抓取即時中價匯率。您也可以手動微調(如加上信用卡手續費)。</p>
            </div>
          )}
       </div>
@@ -1587,7 +1857,12 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
          <h4 className={`font-bold text-sm ${t.textM} mb-2`}>家庭總預算</h4>
          <div className={`flex items-center gap-2 ${t.cardInner} rounded-2xl p-4`}>
            <span className={`font-bold text-xl ${t.textM}`}>$</span>
-           <input type="number" value={s.monthlyBudget} onChange={e => setS({...s, monthlyBudget: Number(e.target.value)})} className={`w-full bg-transparent font-bold text-2xl border-none focus:outline-none`} />
+           <input 
+             type="number" 
+             value={s.monthlyBudget} 
+             onChange={e => setS({...s, monthlyBudget: Number(e.target.value)})} 
+             className={`w-full bg-transparent font-bold text-2xl border-none focus:outline-none`} 
+           />
          </div>
          <div className={`flex justify-between items-center pt-2`}>
            <span className={`font-bold text-sm ${t.text}`}>預算結轉機制</span>
@@ -1605,7 +1880,12 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
            {s.notifyLargeExpense && (
              <div className={`flex items-center gap-3 ${t.cardInner} p-3 rounded-xl`}>
                <span className={`text-xs ${t.textM} font-bold px-1`}>觸發金額大於 $</span>
-               <input type="number" value={s.largeExpenseThreshold} onChange={e => setS({...s, largeExpenseThreshold: Number(e.target.value)})} className={`flex-1 bg-transparent font-bold text-base border-none outline-none`} />
+               <input 
+                 type="number" 
+                 value={s.largeExpenseThreshold} 
+                 onChange={e => setS({...s, largeExpenseThreshold: Number(e.target.value)})} 
+                 className={`flex-1 bg-transparent font-bold text-base border-none outline-none`} 
+               />
              </div>
            )}
          </div>
@@ -1621,20 +1901,37 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
            {s.notifyEvents && (
              <div className={`flex items-center gap-3 ${t.cardInner} p-3 rounded-xl`}>
                <span className={`text-xs ${t.textM} font-bold px-1`}>提前幾天提醒？</span>
-               <input type="number" value={s.notifyAdvanceDays || 3} onChange={e => setS({...s, notifyAdvanceDays: Number(e.target.value)})} className={`w-16 ${t.bg} p-2 rounded-lg font-bold text-base border-none text-center outline-none`} />
+               <input 
+                 type="number" 
+                 value={s.notifyAdvanceDays || 3} 
+                 onChange={e => setS({...s, notifyAdvanceDays: Number(e.target.value)})} 
+                 className={`w-16 ${t.bg} p-2 rounded-lg font-bold text-base border-none text-center outline-none`} 
+               />
                <span className={`text-xs ${t.textM} font-bold`}>天</span>
              </div>
            )}
          </div>
       </div>
 
-      <button onClick={onRecurring} className={`w-full py-4 rounded-full border ${t.border} ${t.bg} font-bold text-sm flex justify-between items-center px-6 ${t.text} shadow-sm active:scale-95`}>
+      <button 
+        onClick={onRecurring} 
+        className={`w-full py-4 rounded-full border ${t.border} ${t.bg} font-bold text-sm flex justify-between items-center px-6 ${t.text} shadow-sm active:scale-95`}
+      >
         <div className="flex items-center gap-2"><Repeat className={`w-5 h-5 ${t.textM}`} /> 設定週期性自動記帳</div>
         <ChevronRight className={`w-5 h-5 ${t.textM}`} />
       </button>
 
-      <button onClick={() => onSave(s)} className={`w-full py-5 rounded-full font-bold text-lg text-white mt-2 shadow-lg ${t.primary} active:scale-95`}>儲存設定</button>
-      <button onClick={onExport} className={`w-full py-5 rounded-full font-bold text-base border ${t.border} mt-2 shadow-sm flex items-center justify-center gap-2 text-[#0F9D58] ${t.bg} hover:opacity-80 active:scale-95`}>
+      <button 
+        onClick={() => onSave(s)} 
+        className={`w-full py-5 rounded-full font-bold text-lg text-white mt-2 shadow-lg ${t.primary} active:scale-95`}
+      >
+        儲存設定
+      </button>
+      
+      <button 
+        onClick={onExport} 
+        className={`w-full py-5 rounded-full font-bold text-base border ${t.border} mt-2 shadow-sm flex items-center justify-center gap-2 text-[#0F9D58] ${t.bg} hover:opacity-80 active:scale-95`}
+      >
         <DownloadCloud className="w-5 h-5"/> 匯出 CSV (可匯入 Google Sheets)
       </button>
     </div>
@@ -1662,7 +1959,8 @@ const BarcodeDisplay = ({ code, t }) => {
 
 const BarcodeForm = ({ codes, onSave, t }) => {
   const [tab, setTab] = useState('h');
-  const [h, setH] = useState(codes.h || ''); const [w, setW] = useState(codes.w || ''); 
+  const [h, setH] = useState(codes.h || ''); 
+  const [w, setW] = useState(codes.w || ''); 
   const [mode, setMode] = useState('view'); 
   return (
     <div className="space-y-5">
@@ -1691,17 +1989,30 @@ const BarcodeForm = ({ codes, onSave, t }) => {
 const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
   const [view, setView] = useState('list');
   const [step, setStep] = useState(1);
-  const [r, setR] = useState({ name: '', frequency: 'monthly', interval: 1, txData: { type: 'expense', category: cats.expense[0].name, accountId: accounts[0]?.id||'', amount: '', note: '' } });
+  const [r, setR] = useState({ 
+    name: '', frequency: 'monthly', interval: 1, 
+    txData: { type: 'expense', category: cats.expense[0].name, accountId: accounts[0]?.id||'', amount: '', note: '' } 
+  });
 
   if (view === 'list') return (
     <div className="space-y-5 h-full flex flex-col">
-      <button onClick={() => setView('add')} className={`w-full py-4 rounded-2xl border-2 border-dashed ${t.border} ${t.textM} font-bold text-base flex justify-center items-center gap-2`}>+ 新增自動記帳規則</button>
+      <button onClick={() => setView('add')} className={`w-full py-4 rounded-2xl border-2 border-dashed ${t.border} ${t.textM} font-bold text-base flex justify-center items-center gap-2`}>
+        + 新增自動記帳規則
+      </button>
       <div className="flex-1 overflow-y-auto space-y-4 scrollbar-hide pb-5">
         {rules.length === 0 ? <div className={`text-center py-12 text-sm ${t.textM} font-bold border ${t.border} rounded-[2rem] ${t.bg}`}>尚無自動記帳規則</div> : rules.map(rule => (
           <div key={rule.id} className={`p-5 rounded-3xl border ${t.border} ${t.cardInner} flex justify-between items-center relative shadow-sm`}>
-            <div><h4 className="font-extrabold text-base">{rule.name}</h4><p className={`text-xs font-bold ${t.textM} mt-1.5`}>每 {rule.interval} {rule.frequency === 'monthly' ? '個月' : '週'}</p></div>
-            <div className="text-right pr-8"><span className="font-black text-xl">${rule.txData.amount}</span><p className={`text-xs font-bold ${t.textM} mt-1`}>{rule.txData.type === 'transfer' ? '轉帳' : rule.txData.category}</p></div>
-            <button onClick={() => onDelete(rule.id)} className={`absolute top-5 right-4 ${t.textM} hover:text-red-500 p-1`}><Trash2 className="w-5 h-5" /></button>
+            <div>
+              <h4 className="font-extrabold text-base">{rule.name}</h4>
+              <p className={`text-xs font-bold ${t.textM} mt-1.5`}>每 {rule.interval} {rule.frequency === 'monthly' ? '個月' : '週'}</p>
+            </div>
+            <div className="text-right pr-8">
+              <span className="font-black text-xl">${rule.txData.amount}</span>
+              <p className={`text-xs font-bold ${t.textM} mt-1`}>{rule.txData.type === 'transfer' ? '轉帳' : rule.txData.category}</p>
+            </div>
+            <button onClick={() => onDelete(rule.id)} className={`absolute top-5 right-4 ${t.textM} hover:text-red-500 p-1`}>
+              <Trash2 className="w-5 h-5" />
+            </button>
           </div>
         ))}
       </div>
@@ -1723,7 +2034,10 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
               <span className="font-bold text-lg px-2">每</span>
               <input type="number" min="1" value={r.interval} onChange={e => setR({ ...r, interval: Number(e.target.value) })} className={`w-24 p-4 rounded-xl font-bold text-xl text-center ${t.bg} border-none outline-none`} />
               <div className={`flex p-1.5 rounded-xl border ${t.border} ${t.bg} flex-1`}>
-                {['monthly:個月', 'weekly:週'].map(i => { const [k, l] = i.split(':'); return <button key={k} onClick={() => setR({ ...r, frequency: k })} className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${r.frequency === k ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>{l}</button> })}
+                {['monthly:個月', 'weekly:週'].map(i => { 
+                  const [k, l] = i.split(':'); 
+                  return <button key={k} onClick={() => setR({ ...r, frequency: k })} className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${r.frequency === k ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>{l}</button> 
+                })}
               </div>
             </div>
           </div>
@@ -1754,47 +2068,128 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
 };
 
 const AccForm = ({ onSave, t }) => {
-  const [n, setN] = useState(''); const [i, setI] = useState('🏦');
+  const [n, setN] = useState(''); 
+  const [i, setI] = useState('🏦');
+  
   return (
     <div className="space-y-5">
-      <div className="space-y-2"><label className={`text-xs font-bold ${t.textM} px-2`}>帳戶名稱</label><input value={n} onChange={e => setN(e.target.value)} placeholder="例如：中信戶頭" className={`w-full p-4 rounded-xl font-bold text-sm ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} /></div>
-      <div className="space-y-2"><label className={`text-xs font-bold ${t.textM} px-2`}>帳戶圖示</label><div className="flex gap-2 text-3xl overflow-x-auto py-2 hide-scrollbar">{['🏦','💳','💼','💎', '🐖', '🪙', '📈', '🏠'].map(x => (<button key={x} onClick={() => setI(x)} className={`p-4 border rounded-2xl shrink-0 transition-all ${i === x ? `${t.primaryText} ${t.bg} border-transparent shadow-sm` : `${t.border} ${t.cardInner}`}`}>{x}</button>))}</div></div>
-      <button onClick={() => onSave({name:n, type:'joint', icon:i, balance:0})} disabled={!n} className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md ${t.primary} disabled:opacity-50 mt-2`}>建立帳戶</button>
+      <div className="space-y-2">
+        <label className={`text-xs font-bold ${t.textM} px-2`}>帳戶名稱</label>
+        <input 
+          value={n} 
+          onChange={e => setN(e.target.value)} 
+          placeholder="例如：中信戶頭" 
+          className={`w-full p-4 rounded-xl font-bold text-sm ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} 
+        />
+      </div>
+      <div className="space-y-2">
+        <label className={`text-xs font-bold ${t.textM} px-2`}>帳戶圖示</label>
+        <div className="flex gap-2 text-3xl overflow-x-auto py-2 hide-scrollbar">
+          {['🏦','💳','💼','💎', '🐖', '🪙', '📈', '🏠'].map(x => (
+            <button 
+              key={x} 
+              onClick={() => setI(x)} 
+              className={`p-4 border rounded-2xl shrink-0 transition-all ${i === x ? `${t.primaryText} ${t.bg} border-transparent shadow-sm` : `${t.border} ${t.cardInner}`}`}
+            >
+              {x}
+            </button>
+          ))}
+        </div>
+      </div>
+      <button 
+        onClick={() => onSave({name:n, type:'joint', icon:i, balance:0})} 
+        disabled={!n} 
+        className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md ${t.primary} disabled:opacity-50 mt-2`}
+      >
+        建立帳戶
+      </button>
     </div>
   );
 };
 
 const BillForm = ({ onSave, t }) => {
-  const [n, setN] = useState(''); const [a, setA] = useState(''); const [d, setD] = useState(1);
+  const [n, setN] = useState(''); 
+  const [a, setA] = useState(''); 
+  const [d, setD] = useState(1);
+  
   return (
     <div className="space-y-5">
-      <input value={n} onChange={e => setN(e.target.value)} placeholder="帳單名稱 (例如: 手機費)" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} />
+      <input 
+        value={n} 
+        onChange={e => setN(e.target.value)} 
+        placeholder="帳單名稱 (例如: 手機費)" 
+        className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} 
+      />
       <div className="flex gap-3">
-        <div className="flex-1 space-y-2"><label className={`text-xs font-bold ${t.textM} px-2`}>金額</label><input type="number" value={a} onChange={e => setA(e.target.value)} placeholder="0" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} /></div>
-        <div className="flex-1 space-y-2"><label className={`text-xs font-bold ${t.textM} px-2`}>每月幾號繳？</label><input type="number" min="1" max="31" value={d} onChange={e => setD(e.target.value)} className={`w-full p-4 rounded-xl font-bold text-base text-center ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} /></div>
+        <div className="flex-1 space-y-2">
+          <label className={`text-xs font-bold ${t.textM} px-2`}>金額</label>
+          <input 
+            type="number" 
+            value={a} 
+            onChange={e => setA(e.target.value)} 
+            placeholder="0" 
+            className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} 
+          />
+        </div>
+        <div className="flex-1 space-y-2">
+          <label className={`text-xs font-bold ${t.textM} px-2`}>每月幾號繳？</label>
+          <input 
+            type="number" 
+            min="1" 
+            max="31" 
+            value={d} 
+            onChange={e => setD(e.target.value)} 
+            className={`w-full p-4 rounded-xl font-bold text-base text-center ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} 
+          />
+        </div>
       </div>
-      <button onClick={() => onSave({name:n, amount:Number(a), dueDate:Number(d), icon:'🧾'})} disabled={!n || !a} className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md ${t.primary} disabled:opacity-50 mt-2`}>建立帳單</button>
+      <button 
+        onClick={() => onSave({name:n, amount:Number(a), dueDate:Number(d), icon:'🧾'})} 
+        disabled={!n || !a} 
+        className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md ${t.primary} disabled:opacity-50 mt-2`}
+      >
+        建立帳單
+      </button>
     </div>
   );
 };
 
 const NoteForm = ({ data, onSave, onDelete, t }) => {
-  const [ti, setTi] = useState(data?.title || ''); const [c, setC] = useState(data?.content || '');
+  const [ti, setTi] = useState(data?.title || ''); 
+  const [c, setC] = useState(data?.content || '');
+  
   return (
     <div className={`space-y-4 flex flex-col h-full ${t.bg} p-6 rounded-[2rem] border ${t.border} shadow-inner`}>
       <div className={`flex justify-between items-center mb-2 border-b ${t.border} pb-3`}>
-        <input value={ti} onChange={e => setTi(e.target.value)} placeholder="標題..." className={`w-full p-2 font-black text-xl bg-transparent border-none focus:outline-none ${t.text}`} />
+        <input 
+          value={ti} 
+          onChange={e => setTi(e.target.value)} 
+          placeholder="標題..." 
+          className={`w-full p-2 font-black text-xl bg-transparent border-none focus:outline-none ${t.text}`} 
+        />
         {data && <Trash2 onClick={() => onDelete(data.id)} className={`${t.textM} hover:text-red-500 cursor-pointer w-5 h-5 shrink-0`}/>}
       </div>
-      <textarea value={c} onChange={e => setC(e.target.value)} placeholder="內容..." className={`flex-1 w-full p-2 resize-none min-h-[300px] font-bold text-sm bg-transparent border-none focus:outline-none ${t.textM}`} />
-      <button onClick={() => onSave({id:data?.id, title:ti, content:c})} disabled={!ti && !c} className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md ${t.primary} disabled:opacity-50 mt-4 active:scale-95`}>儲存筆記</button>
+      <textarea 
+        value={c} 
+        onChange={e => setC(e.target.value)} 
+        placeholder="內容..." 
+        className={`flex-1 w-full p-2 resize-none min-h-[300px] font-bold text-sm bg-transparent border-none focus:outline-none ${t.textM}`} 
+      />
+      <button 
+        onClick={() => onSave({id:data?.id, title:ti, content:c})} 
+        disabled={!ti && !c} 
+        className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md ${t.primary} disabled:opacity-50 mt-4 active:scale-95`}
+      >
+        儲存筆記
+      </button>
     </div>
   );
 };
 
 const EventForm = ({ onSave, t }) => {
   const today = new Date();
-  const [ti, setTi] = useState(''); const [dateStr, setDateStr] = useState(getLocalYYYYMMDD(today));
+  const [ti, setTi] = useState(''); 
+  const [dateStr, setDateStr] = useState(getLocalYYYYMMDD(today));
   const [displayDate, setDisplayDate] = useState(`${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`);
   
   const handleDateType = (e) => {
@@ -1804,50 +2199,116 @@ const EventForm = ({ onSave, t }) => {
     if (val.length >= 5) formatted = `${val.slice(0,2)}/${val.slice(2,4)}/${val.slice(4)}`;
     else if (val.length >= 3) formatted = `${val.slice(0,2)}/${val.slice(2)}`;
     setDisplayDate(formatted);
-    if (val.length === 8) { const d = val.slice(0,2); const m = val.slice(2,4); const y = val.slice(4); setDateStr(`${y}-${m}-${d}`); }
+    if (val.length === 8) { 
+      const d = val.slice(0,2); const m = val.slice(2,4); const y = val.slice(4); 
+      setDateStr(`${y}-${m}-${d}`); 
+    }
   };
+  
   const handleDateSelect = (e) => {
-    const val = e.target.value; setDateStr(val);
-    if (val) { const [y, m, d] = val.split('-'); setDisplayDate(`${d}/${m}/${y}`); }
+    const val = e.target.value; 
+    setDateStr(val);
+    if (val) { 
+      const [y, m, d] = val.split('-'); 
+      setDisplayDate(`${d}/${m}/${y}`); 
+    }
   };
+  
   return (
     <div className="space-y-5">
       <div className="space-y-2">
         <label className={`block text-xs font-bold ${t.textM} px-1`}>名稱</label>
-        <input value={ti} onChange={e => setTi(e.target.value)} placeholder="名稱 (例如: 結婚紀念日)" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} />
+        <input 
+          value={ti} 
+          onChange={e => setTi(e.target.value)} 
+          placeholder="名稱 (例如: 結婚紀念日)" 
+          className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} 
+        />
       </div>
       <div className="space-y-2">
         <label className={`block text-xs font-bold ${t.textM} px-1`}>日期 (DD/MM/YYYY)</label>
         <div className="relative">
-          <input type="text" value={displayDate} onChange={handleDateType} placeholder="DD/MM/YYYY" maxLength={10} className={`w-full p-4 pr-12 rounded-xl ${t.bg} border-none font-bold text-base outline-none focus:ring-2 ${t.ring}`} />
-          <div className="absolute right-0 top-0 bottom-0 w-12 flex items-center justify-center overflow-hidden"><Calendar className={`w-5 h-5 ${t.textMuted}`} />
-            <input type="date" value={dateStr} onChange={handleDateSelect} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+          <input 
+            type="text" 
+            value={displayDate} 
+            onChange={handleDateType} 
+            placeholder="DD/MM/YYYY" 
+            maxLength={10} 
+            className={`w-full p-4 pr-12 rounded-xl ${t.bg} border-none font-bold text-base outline-none focus:ring-2 ${t.ring}`} 
+          />
+          <div className="absolute right-0 top-0 bottom-0 w-12 flex items-center justify-center overflow-hidden">
+            <Calendar className={`w-5 h-5 ${t.textMuted}`} />
+            <input 
+              type="date" 
+              value={dateStr} 
+              onChange={handleDateSelect} 
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+            />
           </div>
         </div>
       </div>
-      <button onClick={() => onSave({title:ti, date:dateStr, icon:'🎉'})} disabled={!ti || !dateStr || displayDate.length !== 10} className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md bg-pink-500/80 disabled:opacity-50 mt-2`}>新增日子</button>
+      <button 
+        onClick={() => onSave({title:ti, date:dateStr, icon:'🎉'})} 
+        disabled={!ti || !dateStr || displayDate.length !== 10} 
+        className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md bg-pink-500/80 disabled:opacity-50 mt-2`}
+      >
+        新增日子
+      </button>
     </div>
   );
 };
 
 const GoalForm = ({ onSave, t }) => {
-  const [ti, setTi] = useState(''); const [a, setA] = useState('');
+  const [ti, setTi] = useState(''); 
+  const [a, setA] = useState('');
+  
   return (
     <div className="space-y-5">
-      <input value={ti} onChange={e => setTi(e.target.value)} placeholder="目標名稱 (例如: 歐洲旅遊)" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} />
-      <input type="number" value={a} onChange={e => setA(e.target.value)} placeholder="目標金額" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} />
-      <button onClick={() => onSave({title:ti, targetAmount:Number(a)})} disabled={!ti || !a} className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md ${t.primary} disabled:opacity-50 mt-2`}>建立願望</button>
+      <input 
+        value={ti} 
+        onChange={e => setTi(e.target.value)} 
+        placeholder="目標名稱 (例如: 歐洲旅遊)" 
+        className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} 
+      />
+      <input 
+        type="number" 
+        value={a} 
+        onChange={e => setA(e.target.value)} 
+        placeholder="目標金額" 
+        className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border-none outline-none focus:ring-2 ${t.ring}`} 
+      />
+      <button 
+        onClick={() => onSave({title:ti, targetAmount:Number(a)})} 
+        disabled={!ti || !a} 
+        className={`w-full py-4 rounded-full font-bold text-base text-white shadow-md ${t.primary} disabled:opacity-50 mt-2`}
+      >
+        建立願望
+      </button>
     </div>
   );
 };
 
 const FundForm = ({ goal, onSave, t }) => {
   const [a, setA] = useState('');
+  
   return (
     <div className="space-y-6 text-center">
       <p className={`font-bold text-base ${t.textM} mb-4`}>存入資金到 <span className={`${t.primaryText} ml-1`}>{goal?.title}</span></p>
-      <input type="number" value={a} onChange={e => setA(e.target.value)} autoFocus placeholder="$0" className={`w-full py-8 text-center font-black text-6xl bg-transparent border-b-2 ${t.border} ${t.text} focus:outline-none focus:border-[#C86D23]`} />
-      <button onClick={() => onSave(Number(a))} disabled={!a} className={`w-full py-5 rounded-full font-black text-xl text-white shadow-md ${t.primary} disabled:opacity-50 mt-8 active:scale-95`}>確認存入</button>
+      <input 
+        type="number" 
+        value={a} 
+        onChange={e => setA(e.target.value)} 
+        autoFocus 
+        placeholder="$0" 
+        className={`w-full py-8 text-center font-black text-6xl bg-transparent border-b-2 ${t.border} ${t.text} focus:outline-none focus:border-[#C86D23]`} 
+      />
+      <button 
+        onClick={() => onSave(Number(a))} 
+        disabled={!a} 
+        className={`w-full py-5 rounded-full font-black text-xl text-white shadow-md ${t.primary} disabled:opacity-50 mt-8 active:scale-95`}
+      >
+        確認存入
+      </button>
     </div>
   );
 };
