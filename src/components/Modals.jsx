@@ -1,5 +1,4 @@
-import Reactimport React, { useState, useRef, useEffect } from 'react';
-, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X, Plus, Trash2, Edit3, Camera, Calculator, Calendar, Tag, ReceiptText, Loader2,
   Sparkles, ChevronDown, ChevronLeft, ChevronRight, Keyboard, Bot, Send, Check, CheckCircle2,
@@ -326,7 +325,7 @@ export const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => 
     for (const [key, value] of Object.entries(currencyMap)) { if (targetCurrency.includes(key)) { targetCurrency = value; break; } }
     if (targetCurrency.length !== 3) return alert("請輸入正確的國家關鍵字或 3 碼幣別");
     const currentList = s.travelCurrencies || []; if (currentList.find(x => x.code === targetCurrency)) return alert(`${targetCurrency} 已經在列表裡囉！`);
-    try { const res = await fetch(`https://open.er-api.com/v6/latest/${targetCurrency}`); const data = await res.json(); if (data.result === 'success' && data.rates.TWD) { const rate = Number(data.rates.TWD.toFixed(4)); setS(prev => ({...prev, travelCurrencies: [...(prev.travelCurrencies||[]), {code: targetCurrency, rate}]})); setNewCurr(''); alert(`新增成功！\n1 ${targetCurrency} = ${rate} TWD`); } else alert("找不到該幣別匯率，請手動輸入"); } catch (e) { alert("抓取匯率失敗，請檢查網路"); }
+    try { const res = await fetch(`https://open.er-api.com/v6/latest/${targetCurrency}`); const data = await res.json(); if (data.result === 'success' && data.rates.TWD) { const rate = Number(data.rates.TWD.toFixed(4)); setS(prev => ({...prev, travelCurrencies: [...(prev.travelCurrencies||[]), {code: targetCurrency, rate}]})); setNewCurr(''); alert(`新增成功！\n1 ${targetCurrency} = ${rate} TWD`); } else alert("找不到該幣別匯率，請手 manual 輸入"); } catch (e) { alert("抓取匯率失敗，請檢查網路"); }
   };
 
   return (
