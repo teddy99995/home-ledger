@@ -33,6 +33,23 @@ const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMI
                (typeof process !== 'undefined' && process.env?.REACT_APP_GEMINI_API_KEY) || 
                ""; 
 
+// 全球常用貨幣與國家對照表
+const POPULAR_CURRENCIES = [
+  { code: 'JPY', name: '日本' }, { code: 'USD', name: '美國' }, { code: 'EUR', name: '歐洲' },
+  { code: 'KRW', name: '韓國' }, { code: 'HKD', name: '香港' }, { code: 'THB', name: '泰國' },
+  { code: 'GBP', name: '英國' }, { code: 'AUD', name: '澳洲' }, { code: 'RMB', name: '中國' },
+  { code: 'SGD', name: '新加坡' }, { code: 'MYR', name: '馬來西亞' }, { code: 'VND', name: '越南' },
+  { code: 'AED', name: '阿聯酋' }, { code: 'EGP', name: '埃及' }
+];
+
+const getCurrencyName = (code) => POPULAR_CURRENCIES.find(c => c.code === code)?.name || code;
+const getCurrencyLabel = (code) => {
+  if (code === 'TWD') return '台灣 (TWD)';
+  if (code === 'RMB') return '人民幣 (RMB)';
+  const name = getCurrencyName(code);
+  return name && name !== code ? `${name} (${code})` : code;
+};
+
 // 🌟 預設家庭帳本分類設定
 const DEFAULT_CATEGORIES = {
   expense: [
@@ -96,7 +113,7 @@ const fetchWithBackoff = async (url, options, retries = 3) => {
 const ToggleSwitch = ({ checked, onChange, isDark }) => (
   <div 
     onClick={() => onChange(!checked)} 
-    className={`w-14 h-8 rounded-full cursor-pointer relative transition-all duration-300 ease-in-out shadow-inner ${checked ? 'bg-[#4F46E5]' : (isDark ? 'bg-[#27272A]' : 'bg-[#E4E4E7]')}`}
+    className={`w-14 h-8 rounded-full cursor-pointer relative transition-all duration-300 ease-in-out shadow-inner ${checked ? 'bg-[#0EA5E9]' : (isDark ? 'bg-black/40' : 'bg-stone-300')}`}
   >
     <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
   </div>
@@ -114,7 +131,7 @@ const LineChart = ({ data, t }) => {
   
   return (
     <div className={`w-full overflow-x-auto hide-scrollbar ${t.cardInner} rounded-3xl p-5 border ${t.border} shadow-sm`}>
-      <h4 className="font-bold text-sm mb-3 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-indigo-500"/>年度收支趨勢</h4>
+      <h4 className={`font-bold text-sm mb-3 flex items-center gap-2 ${t.text}`}><TrendingUp className="w-5 h-5 text-emerald-500"/>年度收支趨勢</h4>
       <div className="flex gap-4 mb-4 justify-center text-xs font-bold">
         <span className="flex items-center gap-1.5 text-emerald-500"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm"></div>收入</span>
         <span className="flex items-center gap-1.5 text-rose-500"><div className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm"></div>支出</span>
@@ -128,8 +145,8 @@ const LineChart = ({ data, t }) => {
            const cx = pad + (i * (w - 2 * pad)) / 11;
            return (
              <g key={i}>
-                <circle cx={cx} cy={h - pad - (d.inc / maxVal) * (h - 2 * pad)} r="4" fill="#10B981" stroke={t.bg.includes('09') ? "#18181B" : "#FFF"} strokeWidth="2" />
-                <circle cx={cx} cy={h - pad - (d.exp / maxVal) * (h - 2 * pad)} r="4" fill="#F43F5E" stroke={t.bg.includes('09') ? "#18181B" : "#FFF"} strokeWidth="2" />
+                <circle cx={cx} cy={h - pad - (d.inc / maxVal) * (h - 2 * pad)} r="4" fill="#10B981" stroke={t.bg.includes('16') || t.bg.includes('0B') ? "#202536" : "#FFF"} strokeWidth="2" />
+                <circle cx={cx} cy={h - pad - (d.exp / maxVal) * (h - 2 * pad)} r="4" fill="#F43F5E" stroke={t.bg.includes('16') || t.bg.includes('0B') ? "#202536" : "#FFF"} strokeWidth="2" />
                 <text x={cx} y={h - 5} fontSize="10" fill="currentColor" opacity="0.5" textAnchor="middle" fontWeight="bold">{d.month}</text>
              </g>
            );
@@ -154,13 +171,18 @@ export default function App() {
   });
   
   const [ui, setUi] = useState(() => {
+    // 日夜記憶存在本機 (讓老公深色、老婆淺色彼此不干擾)
     const savedIsDark = localStorage.getItem('homeLedgerTheme') === 'dark';
     return {
       date: new Date(), dateRange: { start: '', end: '' },
       tab: 'home', subTab: 'bills', statsView: 'month', chartView: 'expense', modal: null, search: '', filterTags: [], filterAccount: 'all',
-      isDark: savedIsDark, confirm: null, selectedItem: null, toast: null, selectedTx: null
+      isDark: savedIsDark, confirm: null, selectedItem: null, toast: null, selectedTx: null, isManageTags: false
     };
   });
+
+  // 🌟 分頁功能狀態
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
   
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -179,7 +201,7 @@ export default function App() {
   
   const showToast = (msg, type = 'success') => { 
     updateUi({ toast: { msg, type } }); 
-    setTimeout(() => updateUi({ toast: null }), 4000); 
+    setTimeout(() => updateUi({ toast: null }), 3000); 
   };
 
   useEffect(() => {
@@ -309,6 +331,11 @@ export default function App() {
     processRules();
   }, [user, data.recurringRules]);
 
+  // 🌟 重設分頁器
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [ui.search, ui.filterTags, ui.filterAccount, ui.date, ui.dateRange, ui.statsView, ui.tab]);
+
   const activeAccounts = useMemo(() => data.accounts.filter(a => !a.isArchived), [data.accounts]);
 
   const cMonth = getLocalYYYYMM(ui.date);
@@ -332,6 +359,13 @@ export default function App() {
     const tg = ui.filterTags.length === 0 || ui.filterTags.every(tag => t.tags && t.tags.includes(tag));
     return q && tg;
   }), [filteredBaseTxs, ui.search, ui.filterTags]);
+
+  // 🌟 分頁切片邏輯
+  const paginatedTx = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return displayTx.slice(start, start + ITEMS_PER_PAGE);
+  }, [displayTx, currentPage]);
+  const totalPages = Math.max(1, Math.ceil(displayTx.length / ITEMS_PER_PAGE));
 
   const calcStats = (txs) => txs.reduce((s, t) => {
     if (t.type === 'transfer') return s;
@@ -486,8 +520,9 @@ export default function App() {
     });
   };
 
+  // 🌟 還原為原本的 AI API 設定
   const handleCallAI = async () => {
-    if (!apiKey) return showToast("請先在程式碼最上方設定您的 Gemini API Key", "error");
+    if (!apiKey) return showToast("系統未設定 API 金鑰！請在環境變數或檔案最上方設定", "error");
     setIsAiLoading(true); setAiAnalysis('');
     try {
       const topExpCats = Object.entries(tStats.expCat).map(([n,v]) => ({name:n, val:v})).sort((a,b)=>b.val-a.val).slice(0,3).map(c => `${c.name}(${Math.round(c.val/(tStats.exp||1)*100)}%)`).join('、');
@@ -496,8 +531,7 @@ export default function App() {
       
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
       const options = {
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       };
 
@@ -528,15 +562,22 @@ export default function App() {
     showToast("匯出成功！請直接匯入 Google Sheets");
   };
 
-  // 🌞 🌙 日夜與旅遊雙生主題引擎 (升級為 Premium Zinc 科技感配色)
+  // 🌞 🌙 日夜與旅遊四態主題引擎 (老公：智理工作室深色 / 老婆：暖奶油淺色)
   let t = ui.isDark ? { 
-    bg: 'bg-[#09090B]', cardInner: 'bg-[#18181B]', text: 'text-[#FAFAFA]', textM: 'text-[#A1A1AA]', primary: 'bg-[#6366F1]', primaryText: 'text-[#818CF8]', border: 'border-[#27272A]', input: 'bg-[#09090B] text-white', ring: 'focus:ring-[#6366F1]'
+    bg: 'bg-[#161925]', cardInner: 'bg-[#202536]', text: 'text-[#F8FAFC]', textM: 'text-[#94A3B8]', primary: 'bg-[#E3B59B]', primaryText: 'text-[#E3B59B]', primaryBtnText: 'text-[#161925]', border: 'border-[#2D3348]', input: 'bg-[#161925] text-white', ring: 'focus:ring-[#E3B59B]'
   } : {
-    bg: 'bg-[#F4F4F5]', cardInner: 'bg-white', text: 'text-[#09090B]', textM: 'text-[#71717A]', primary: 'bg-[#4F46E5]', primaryText: 'text-[#4F46E5]', border: 'border-[#E4E4E7]', input: 'bg-[#F4F4F5] text-[#09090B]', ring: 'focus:ring-[#4F46E5]'
+    bg: 'bg-[#FDFBF7]', cardInner: 'bg-[#FFFFFF]', text: 'text-[#3F3328]', textM: 'text-[#8C857D]', primary: 'bg-[#F5A623]', primaryText: 'text-[#D97706]', primaryBtnText: 'text-white', border: 'border-[#F0EBE1]', input: 'bg-[#FDFBF7] text-[#3F3328]', ring: 'focus:ring-[#F5A623]'
   };
 
   if (settings.travelMode) {
-     t = { ...t, bg: ui.isDark ? 'bg-[#020617]' : 'bg-[#F0F9FF]', primary: ui.isDark ? 'bg-[#0EA5E9]' : 'bg-[#0284C7]', primaryText: ui.isDark ? 'text-[#38BDF8]' : 'text-[#0284C7]' }
+     t = { ...t, 
+       bg: ui.isDark ? 'bg-[#0B101E]' : 'bg-[#E0F2FE]', 
+       cardInner: ui.isDark ? 'bg-[#172033]' : 'bg-[#FFFFFF]',
+       primary: ui.isDark ? 'bg-[#0EA5E9]' : 'bg-[#0284C7]', 
+       primaryText: ui.isDark ? 'text-[#0EA5E9]' : 'text-[#0284C7]', 
+       primaryBtnText: 'text-white',
+       border: ui.isDark ? 'border-[#1E293B]' : 'border-[#BAE6FD]'
+     }
   }
 
   const handleOpenTx = (tx = null) => {
@@ -588,8 +629,10 @@ export default function App() {
         .pt-safe { padding-top: calc(1rem + env(safe-area-inset-top)); }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        body { background-color: ${settings.travelMode ? (ui.isDark ? '#020617' : '#F0F9FF') : (ui.isDark ? '#09090B' : '#F4F4F5')}; margin: 0; padding: 0; transition: background-color 0.5s ease; }
+        body { background-color: ${settings.travelMode ? (ui.isDark ? '#0B101E' : '#E0F2FE') : (ui.isDark ? '#161925' : '#FDFBF7')}; margin: 0; padding: 0; transition: background-color 0.5s ease; }
         .donut-ring { stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: 2px solid ${ui.isDark ? '#E3B59B' : '#F5A623'}; margin-top: -8px; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 8px; cursor: pointer; background: ${ui.isDark ? '#2D3348' : '#F0EBE1'}; border-radius: 4px; }
       `}} />
 
       <div className={`min-h-[100dvh] w-full flex justify-center ${t.bg} transition-colors duration-500 overflow-x-hidden font-sans`}>
@@ -633,7 +676,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Toast 提示 */}
+          {/* Toast 提示 (完美修復：包含錯誤時的紅色警示) */}
           {ui.toast && (
             <div className="fixed top-6 left-0 right-0 z-[100] flex justify-center px-4 animate-in slide-in-from-top-4 duration-300 pointer-events-none">
               <div className={`flex items-center gap-3 px-6 py-4 rounded-full shadow-2xl border ${t.cardInner} ${t.border} ${t.text} backdrop-blur-md bg-opacity-90`}>
@@ -646,10 +689,10 @@ export default function App() {
           {/* 🌟 頂部 Header */}
           <header className={`px-6 pt-safe pb-4 flex justify-between items-center ${t.cardInner} z-10 shrink-0 border-b ${t.border}`}>
             <div className="flex gap-3 w-24">
-               <button onClick={() => updateUi({ isDark: !ui.isDark })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all text-stone-500 hover:text-indigo-500`}>
+               <button onClick={() => updateUi({ isDark: !ui.isDark })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all text-stone-500 hover:${t.primaryText}`}>
                  {ui.isDark ? <Sun className="w-5 h-5"/> : <Moon className="w-5 h-5"/>}
                </button>
-               <button onClick={() => updateUi({ modal: 'settings' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all text-stone-500 hover:text-indigo-500`}>
+               <button onClick={() => updateUi({ modal: 'settings' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all text-stone-500 hover:${t.primaryText}`}>
                  <Settings className="w-5 h-5"/>
                </button>
             </div>
@@ -661,12 +704,12 @@ export default function App() {
               </h1>
             </div>
             <div className="flex gap-3 w-24 justify-end relative">
-              <button onClick={() => updateUi({ modal: 'barcode' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all text-stone-500 hover:text-indigo-500`}>
+              <button onClick={() => updateUi({ modal: 'barcode' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all text-stone-500 hover:${t.primaryText}`}>
                 <Barcode className="w-5 h-5"/>
               </button>
-              <button onClick={() => updateUi({ modal: 'notify' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all relative text-stone-500 hover:text-indigo-500`}>
+              <button onClick={() => updateUi({ modal: 'notify' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all relative text-stone-500 hover:${t.primaryText}`}>
                 <Bell className="w-5 h-5"/>
-                {activeAlerts.length > 0 && <span className={`absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 border-2 ${ui.isDark ? 'border-[#18181B]' : 'border-white'} rounded-full`}></span>}
+                {activeAlerts.length > 0 && <span className={`absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 border-2 ${ui.isDark ? 'border-[#202536]' : 'border-white'} rounded-full`}></span>}
               </button>
             </div>
           </header>
@@ -687,10 +730,10 @@ export default function App() {
                 </div>
 
                 <section className={`${t.cardInner} rounded-[2.5rem] p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border ${t.border} relative overflow-hidden`}>
-                  <div className={`absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 rounded-full blur-3xl pointer-events-none`}></div>
+                  <div className={`absolute top-0 right-0 w-64 h-64 bg-gradient-to-br ${ui.isDark ? 'from-[#E3B59B]/5' : 'from-indigo-500/5'} to-purple-500/5 rounded-full blur-3xl pointer-events-none`}></div>
                   
                   <div className="flex justify-between items-center mb-6 relative z-10">
-                     <button onClick={() => updateUi({ modal: 'date' })} className={`flex items-center gap-2 font-bold text-lg ${t.text} ${t.bg} px-5 py-2.5 rounded-xl border ${t.border} active:scale-95 transition-all hover:border-indigo-500/30`}>
+                     <button onClick={() => updateUi({ modal: 'date' })} className={`flex items-center gap-2 font-bold text-lg ${t.text} ${t.bg} px-5 py-2.5 rounded-xl border ${t.border} active:scale-95 transition-all hover:border-[#E3B59B]/30`}>
                        {ui.date.getFullYear()}年{ui.date.getMonth() + 1}月 <ChevronDown className="w-5 h-5" />
                      </button>
                   </div>
@@ -734,10 +777,10 @@ export default function App() {
 
                 <div className="flex gap-3">
                   <div className="relative flex-1 group">
-                    <Search className={`w-6 h-6 ${t.textM} absolute left-5 top-1/2 -translate-y-1/2 group-focus-within:text-indigo-500 transition-colors`} />
+                    <Search className={`w-6 h-6 ${t.textM} absolute left-5 top-1/2 -translate-y-1/2 transition-colors`} />
                     <input type="text" value={ui.search} onChange={e => updateUi({ search: e.target.value })} placeholder="搜尋明細、備註..." className={`w-full ${t.cardInner} font-bold py-4 pl-14 pr-5 text-base rounded-2xl border ${t.border} shadow-sm focus:outline-none focus:ring-2 ${t.ring} transition-all`} />
                   </div>
-                  <button onClick={() => updateUi({ modal: 'tags' })} className={`p-4 rounded-2xl border ${ui.filterTags.length > 0 ? `${t.primary} text-white border-transparent shadow-md` : `${t.cardInner} ${t.textM} ${t.border}`} shadow-sm active:scale-95 transition-all`}>
+                  <button onClick={() => updateUi({ modal: 'tags' })} className={`p-4 rounded-2xl border ${ui.filterTags.length > 0 ? `${t.primary} ${t.primaryBtnText} border-transparent shadow-md` : `${t.cardInner} ${t.textM} ${t.border}`} shadow-sm active:scale-95 transition-all`}>
                     <Filter className="w-6 h-6" />
                   </button>
                 </div>
@@ -745,15 +788,26 @@ export default function App() {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center px-2">
                     <h3 className="text-2xl font-black">最近明細</h3>
-                    <div className="flex gap-2">
-                      <button className={`p-2 rounded-full ${t.cardInner} border ${t.border} shadow-sm active:scale-95 hover:text-indigo-500 transition-colors`}><ChevronLeft className={`w-5 h-5 ${t.textM}`}/></button>
-                      <button className={`p-2 rounded-full ${t.cardInner} border ${t.border} shadow-sm active:scale-95 hover:text-indigo-500 transition-colors`}><ChevronRight className={`w-5 h-5 ${t.textM}`}/></button>
+                    
+                    {/* 🌟 15 筆分頁切換按鈕 */}
+                    <div className="flex gap-2 items-center">
+                      <span className={`text-xs font-bold ${t.textM} mr-1`}>{currentPage} / {totalPages}</span>
+                      <button 
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className={`p-2 rounded-full ${t.cardInner} border ${t.border} shadow-sm active:scale-95 hover:${t.primaryText} transition-colors disabled:opacity-30 disabled:hover:text-inherit`}
+                      ><ChevronLeft className={`w-5 h-5 ${t.textM}`}/></button>
+                      <button 
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        className={`p-2 rounded-full ${t.cardInner} border ${t.border} shadow-sm active:scale-95 hover:${t.primaryText} transition-colors disabled:opacity-30 disabled:hover:text-inherit`}
+                      ><ChevronRight className={`w-5 h-5 ${t.textM}`}/></button>
                     </div>
                   </div>
                   
-                  {displayTx.length === 0 ? (
+                  {paginatedTx.length === 0 ? (
                     <div className={`text-center py-16 font-bold text-lg ${t.textM} ${t.cardInner} rounded-3xl border ${t.border} shadow-sm`}>本月還沒有記帳紀錄</div>
-                  ) : displayTx.map(tx => {
+                  ) : paginatedTx.map(tx => {
                     const catObj = data.categories.expense.find(c=>c.name===tx.category) || data.categories.income.find(c=>c.name===tx.category);
                     const icon = catObj ? catObj.icon : '📝';
                     
@@ -764,8 +818,8 @@ export default function App() {
                     }
                     
                     return (
-                      // 🌟 防誤觸設計：移除全卡片點擊，加入明確的編輯與刪除小按鈕
-                      <div key={tx.id} className={`p-4 sm:p-5 rounded-3xl flex flex-col border ${t.border} ${t.cardInner} shadow-sm relative overflow-hidden transition-all hover:shadow-md hover:border-indigo-500/30`}>
+                      // 🌟 防誤觸設計：全卡片點擊，但改為打開右下角獨立的編輯與刪除小按鈕
+                      <div key={tx.id} className={`p-4 sm:p-5 rounded-3xl flex flex-col border ${t.border} ${t.cardInner} shadow-sm relative overflow-hidden transition-all hover:shadow-md hover:border-[#E3B59B]/30`}>
                         <div className="flex items-center justify-between z-10">
                           <div className="flex items-center gap-3 sm:gap-4 truncate">
                             <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full ${t.bg} flex items-center justify-center text-xl sm:text-2xl shrink-0 shadow-inner`}>
@@ -799,7 +853,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          {/* 🌟 金額與操作按鈕區塊 */}
+                          {/* 🌟 金額與點擊提示區塊 */}
                           <div className="flex flex-col items-end gap-2 shrink-0 ml-2">
                             <span className={`font-black text-xl sm:text-2xl drop-shadow-sm ${tx.type === 'expense' ? t.text : tx.type === 'income' ? 'text-emerald-500' : t.textM}`}>
                               {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}${tx.amount.toLocaleString()}
@@ -807,14 +861,14 @@ export default function App() {
                             <div className="flex gap-1.5 sm:gap-2">
                                <button 
                                  onClick={(e) => { e.stopPropagation(); handleOpenTx(tx); }} 
-                                 className={`p-1.5 sm:p-2 rounded-full ${t.bg} border ${t.border} text-stone-500 hover:text-indigo-500 active:scale-95 transition-all shadow-sm`}
+                                 className={`p-1.5 sm:p-2 rounded-full ${t.bg} border ${t.border} text-stone-500 hover:${t.primaryText} active:scale-95 transition-all shadow-sm`}
                                  title="編輯這筆紀錄"
                                >
                                  <Edit3 size={14} className="sm:w-4 sm:h-4" />
                                </button>
                                <button 
                                  onClick={(e) => { e.stopPropagation(); confirmDel('確定要刪除這筆紀錄嗎？', () => deleteDoc(getDocRef('shared_ledger', tx.id))); }} 
-                                 className={`p-1.5 sm:p-2 rounded-full bg-rose-50 border border-rose-100 dark:bg-rose-500/10 dark:border-rose-500/20 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/20 active:scale-95 transition-all shadow-sm`}
+                                 className={`p-1.5 sm:p-2 rounded-full ${ui.isDark ? 'bg-red-950/30 border-red-900/50 hover:bg-red-900/50' : 'bg-red-50 border-red-100 hover:bg-red-100'} text-red-500 active:scale-95 transition-all shadow-sm`}
                                  title="刪除這筆紀錄"
                                >
                                  <Trash2 size={14} className="sm:w-4 sm:h-4" />
@@ -848,8 +902,8 @@ export default function App() {
                           </div>
                           <div className="text-3xl font-black drop-shadow-sm">${(accBal[a.id] || 0).toLocaleString()}</div>
                           
-                          <div className="flex justify-end mt-4 pt-4 border-t border-transparent group-hover:border-stone-100 dark:group-hover:border-slate-800 gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                             <button onClick={() => confirmAction('確定要封存此帳戶嗎？封存後記帳不再顯示，但歷史記錄保留。', () => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: true}))} className={`p-2.5 rounded-full ${t.bg} ${t.textM} hover:text-indigo-500 transition-colors shadow-sm`}>
+                          <div className="flex justify-end mt-4 pt-4 border-t border-transparent group-hover:border-stone-100 dark:group-hover:border-[#2D3348] gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                             <button onClick={() => confirmAction('確定要封存此帳戶嗎？封存後記帳不再顯示，但歷史記錄保留。', () => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: true}))} className={`p-2.5 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}>
                                <Archive className="w-4 h-4"/>
                              </button>
                              <button onClick={() => confirmDel('危險操作：確定要刪除帳戶嗎？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} className={`p-2.5 rounded-full ${t.bg} ${t.textM} hover:text-red-500 transition-colors shadow-sm`}>
@@ -858,7 +912,7 @@ export default function App() {
                           </div>
                         </div>
                       ))}
-                      <div onClick={() => updateUi({ modal: 'account' })} className={`bg-transparent border-2 border-dashed ${t.border} rounded-3xl p-6 flex flex-col items-center justify-center ${t.textM} cursor-pointer min-h-[160px] hover:border-indigo-500 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 transition-all active:scale-95`}>
+                      <div onClick={() => updateUi({ modal: 'account' })} className={`bg-transparent border-2 border-dashed ${t.border} rounded-3xl p-6 flex flex-col items-center justify-center ${t.textM} cursor-pointer min-h-[160px] hover:border-[#E3B59B] hover:${t.primaryText} hover:bg-[#E3B59B]/10 transition-all active:scale-95`}>
                         <Plus className="w-10 h-10 mb-3"/>
                         <span className="text-lg font-bold">新增帳戶</span>
                       </div>
@@ -876,7 +930,7 @@ export default function App() {
                                <span className="font-bold text-lg truncate">{a.name}</span>
                              </div>
                              <div className="text-3xl font-black">${(accBal[a.id] || 0).toLocaleString()}</div>
-                             <div className="flex justify-end mt-4 pt-4 border-t border-transparent group-hover:border-stone-100 dark:group-hover:border-slate-800 gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                             <div className="flex justify-end mt-4 pt-4 border-t border-transparent group-hover:border-stone-100 dark:group-hover:border-[#2D3348] gap-2 opacity-0 group-hover:opacity-100 transition-all">
                                 <button onClick={() => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: false})} className={`p-2.5 rounded-full ${t.bg} ${t.textM} hover:text-emerald-500 transition-colors shadow-sm`} title="解除封存">
                                   <ArchiveRestore className="w-4 h-4"/>
                                 </button>
@@ -914,12 +968,30 @@ export default function App() {
                  <div className="flex justify-between items-center px-2 pt-2 mb-2">
                    {ui.statsView === 'custom' ? (
                       <div className="flex gap-2 w-full items-center">
-                         <input type="date" value={ui.dateRange.start} onChange={e=>updateUi({dateRange:{...ui.dateRange, start: e.target.value}})} className={`flex-1 ${t.cardInner} p-4 rounded-xl border ${t.border} font-bold text-sm shadow-sm focus:ring-2 ${t.ring} outline-none`} />
+                         <div className="relative flex-1 group">
+                           <div className={`flex items-center justify-between p-4 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm group-focus-within:ring-2 ${t.ring} transition-all`}>
+                             <div className="flex items-center gap-2">
+                               <Calendar className={`w-5 h-5 ${t.textM}`} />
+                               <span className={`font-bold text-sm ${ui.dateRange.start ? t.text : t.textM}`}>{ui.dateRange.start ? ui.dateRange.start.replace(/-/g, '/') : 'mm/dd/yyyy'}</span>
+                             </div>
+                             <Calendar className={`w-4 h-4 ${t.textM} opacity-50`} />
+                           </div>
+                           <input type="date" value={ui.dateRange.start} onChange={e=>updateUi({dateRange:{...ui.dateRange, start: e.target.value}})} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                         </div>
                          <span className={`self-center ${t.textM} font-bold`}>至</span>
-                         <input type="date" value={ui.dateRange.end} onChange={e=>updateUi({dateRange:{...ui.dateRange, end: e.target.value}})} className={`flex-1 ${t.cardInner} p-4 rounded-xl border ${t.border} font-bold text-sm shadow-sm focus:ring-2 ${t.ring} outline-none`} />
+                         <div className="relative flex-1 group">
+                           <div className={`flex items-center justify-between p-4 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm group-focus-within:ring-2 ${t.ring} transition-all`}>
+                             <div className="flex items-center gap-2">
+                               <Calendar className={`w-5 h-5 ${t.textM}`} />
+                               <span className={`font-bold text-sm ${ui.dateRange.end ? t.text : t.textM}`}>{ui.dateRange.end ? ui.dateRange.end.replace(/-/g, '/') : 'mm/dd/yyyy'}</span>
+                             </div>
+                             <Calendar className={`w-4 h-4 ${t.textM} opacity-50`} />
+                           </div>
+                           <input type="date" value={ui.dateRange.end} onChange={e=>updateUi({dateRange:{...ui.dateRange, end: e.target.value}})} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                         </div>
                       </div>
                    ) : (
-                      <button onClick={() => updateUi({ modal: 'date' })} className={`flex items-center gap-1.5 font-bold text-lg ${t.cardInner} px-5 py-2.5 rounded-xl shadow-sm border ${t.border} active:scale-95 transition-all hover:border-indigo-500/30`}>
+                      <button onClick={() => updateUi({ modal: 'date' })} className={`flex items-center gap-1.5 font-bold text-lg ${t.cardInner} px-5 py-2.5 rounded-xl shadow-sm border ${t.border} active:scale-95 transition-all`}>
                         {ui.date.getFullYear()}年{ui.statsView === 'month' ? `${ui.date.getMonth() + 1}月` : '全年度'} <ChevronDown className="w-5 h-5 ml-1" />
                       </button>
                    )}
@@ -943,14 +1015,14 @@ export default function App() {
                   <div className="relative w-64 h-64 flex items-center justify-center mb-8 z-10">
                     <svg className="w-full h-full transform -rotate-90 drop-shadow-xl" viewBox="0 0 100 100">
                       {/* 外圈：總收入 (翡翠綠) - 半徑 42 */}
-                      <circle cx="50" cy="50" r="42" fill="transparent" stroke={ui.isDark ? "#27272A" : "#F4F4F5"} strokeWidth="8" />
+                      <circle cx="50" cy="50" r="42" fill="transparent" stroke={ui.isDark ? "#2D3348" : "#F4F4F5"} strokeWidth="8" />
                       <circle cx="50" cy="50" r="42" fill="transparent" stroke="#10B981" strokeWidth="8" 
                               strokeDasharray="263.89" 
                               strokeDashoffset={263.89 * (1 - (tStats.inc / (Math.max(tStats.inc, tStats.exp) || 1)))} 
                               className={`donut-ring ${ui.chartView === 'expense' ? 'opacity-30' : 'opacity-100'}`} />
                       
                       {/* 內圈：總支出 (玫瑰紅) - 半徑 30 */}
-                      <circle cx="50" cy="50" r="30" fill="transparent" stroke={ui.isDark ? "#27272A" : "#F4F4F5"} strokeWidth="8" />
+                      <circle cx="50" cy="50" r="30" fill="transparent" stroke={ui.isDark ? "#2D3348" : "#F4F4F5"} strokeWidth="8" />
                       <circle cx="50" cy="50" r="30" fill="transparent" stroke="#F43F5E" strokeWidth="8" 
                               strokeDasharray="188.49" 
                               strokeDashoffset={188.49 * (1 - (tStats.exp / (Math.max(tStats.inc, tStats.exp) || 1)))} 
@@ -1010,7 +1082,7 @@ export default function App() {
                 </div>
 
                 <div className={`${t.cardInner} rounded-[2.5rem] p-6 border ${t.border} shadow-sm`}>
-                  <button onClick={handleCallAI} disabled={isAiLoading} className={`w-full ${t.primary} text-white py-5 rounded-2xl font-bold text-lg flex justify-center items-center gap-2 active:scale-95 shadow-lg disabled:opacity-50 transition-all`}>
+                  <button onClick={handleCallAI} disabled={isAiLoading} className={`w-full ${t.primary} ${t.primaryBtnText} py-5 rounded-2xl font-bold text-lg flex justify-center items-center gap-2 active:scale-95 shadow-lg disabled:opacity-50 transition-all`}>
                     {isAiLoading ? <Loader2 className="animate-spin w-5 h-5"/> : <Sparkles className="w-5 h-5"/>} 產生理財顧問分析
                   </button>
                   {aiAnalysis && <p className={`mt-5 p-6 ${t.bg} rounded-3xl text-base font-bold leading-relaxed border ${t.border} shadow-inner`}>{aiAnalysis}</p>}
@@ -1061,7 +1133,7 @@ export default function App() {
                         <div className="flex gap-3 items-center">
                           <span className="font-black text-2xl drop-shadow-sm">${b.amount}</span>
                           {!b.isPaid && (
-                            <button onClick={() => doAction(() => updateDoc(getDocRef('shared_bills', b.id), {isPaid: true}), "已繳款")} className={`p-2.5 rounded-full ${t.primary} text-white shadow-md active:scale-95 hover:brightness-110 transition-all`}>
+                            <button onClick={() => doAction(() => updateDoc(getDocRef('shared_bills', b.id), {isPaid: true}), "已繳款")} className={`p-2.5 rounded-full ${t.primary} ${t.primaryBtnText} shadow-md active:scale-95 hover:brightness-110 transition-all`}>
                               <Check className="w-5 h-5"/>
                             </button>
                           )}
@@ -1076,7 +1148,7 @@ export default function App() {
                   <div className="space-y-4">
                     <form onSubmit={e => { e.preventDefault(); const v = e.target.item.value.trim(); if(v) doAction(() => addDoc(getCol('shared_shopping'), {text: v, completed: false, createdAt: serverTimestamp()})); e.target.reset(); }} className="flex gap-3 mb-6">
                       <input name="item" placeholder="新增待買物品..." className={`flex-1 px-5 py-4 rounded-2xl border ${t.border} ${t.cardInner} font-bold text-base shadow-sm focus:outline-none focus:ring-2 ${t.ring} transition-all`}/>
-                      <button type="submit" className={`px-6 rounded-2xl ${t.primary} text-white shadow-md active:scale-95 transition-all`}><Plus className="w-6 h-6"/></button>
+                      <button type="submit" className={`px-6 rounded-2xl ${t.primary} ${t.primaryBtnText} shadow-md active:scale-95 transition-all`}><Plus className="w-6 h-6"/></button>
                     </form>
                     
                     {data.shopping.length === 0 ? (
@@ -1100,7 +1172,7 @@ export default function App() {
                         <h3 className="text-xl font-black">共同記事</h3>
                         <p className={`text-xs font-bold ${t.textM} mt-1`}>記錄生活大小事</p>
                       </div>
-                      <button onClick={() => updateUi({ modal: 'note', selectedItem: null })} className={`px-5 py-2.5 ${t.primary} text-white rounded-full text-sm font-bold shadow-md active:scale-95 transition-all`}>
+                      <button onClick={() => updateUi({ modal: 'note', selectedItem: null })} className={`px-5 py-2.5 ${t.primary} ${t.primaryBtnText} rounded-full text-sm font-bold shadow-md active:scale-95 transition-all`}>
                         + 新增筆記
                       </button>
                     </div>
@@ -1198,11 +1270,11 @@ export default function App() {
           <div className="fixed bottom-0 left-0 right-0 z-40 flex justify-center pointer-events-none">
             <div className="w-full max-w-md md:max-w-xl relative pointer-events-auto">
               <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-50">
-                <button onClick={() => handleOpenTx(null)} className={`h-[72px] w-[72px] ${t.primary} text-white rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-transform border-[6px] ${ui.isDark ? 'border-[#09090B]' : 'border-[#F4F4F5]'} hover:brightness-110`}>
+                <button onClick={() => handleOpenTx(null)} className={`h-[72px] w-[72px] ${t.primary} ${t.primaryBtnText} rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-transform border-[6px] ${ui.isDark ? 'border-[#161925]' : 'border-[#FDFBF7]'} hover:brightness-110`}>
                   <Plus className="w-8 h-8" strokeWidth={3} />
                 </button>
               </div>
-              <nav className={`w-full ${ui.isDark ? 'bg-[#18181B]/80' : 'bg-white/80'} backdrop-blur-xl border-t ${t.border} px-8 pb-safe pt-3 flex justify-between items-center h-[80px] rounded-t-[2.5rem] shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] transition-colors duration-500`}>
+              <nav className={`w-full ${ui.isDark ? 'bg-[#202536]/80' : 'bg-white/80'} backdrop-blur-xl border-t ${t.border} px-8 pb-safe pt-3 flex justify-between items-center h-[80px] rounded-t-[2.5rem] shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] transition-colors duration-500`}>
                 <div className="flex gap-8">
                   <button onClick={() => updateUi({ tab: 'home' })} className={`flex flex-col items-center gap-1.5 transition-colors ${ui.tab === 'home' ? t.primaryText : t.textM}`}>
                     <Home className="w-6 h-6" />
@@ -1256,6 +1328,7 @@ export default function App() {
                       onDeleteTemplate={(id) => confirmDel('確定要刪除範本嗎？', () => deleteDoc(getDocRef('shared_templates', id)))}
                       onSave={handleTxSave}
                       onDeleteTx={(id) => confirmDel('確定要刪除這筆紀錄嗎？', () => deleteDoc(getDocRef('shared_ledger', id)))} 
+                      showToast={showToast}
                       t={t} ui={ui}
                     />
                   )}
@@ -1273,7 +1346,7 @@ export default function App() {
                     {ui.modal === 'date' && (
                       <div className="grid grid-cols-3 gap-3 pb-8 pt-4">
                         {Array.from({length:12}).map((_,i) => (
-                          <button key={i} onClick={() => { updateUi({ date: new Date(ui.date.getFullYear(), i, 1), modal: null }); }} className={`py-5 rounded-2xl font-bold border text-lg active:scale-95 transition-all ${ui.date.getMonth()===i ? `${t.primary} text-white border-transparent shadow-md` : `${t.bg} ${t.border} hover:border-indigo-500/30`}`}>
+                          <button key={i} onClick={() => { updateUi({ date: new Date(ui.date.getFullYear(), i, 1), modal: null }); }} className={`py-5 rounded-2xl font-bold border text-lg active:scale-95 transition-all ${ui.date.getMonth()===i ? `${t.primary} ${t.primaryBtnText} border-transparent shadow-md` : `${t.bg} ${t.border} hover:border-[#E3B59B]/30`}`}>
                             {i+1}月
                           </button>
                         ))}
@@ -1373,12 +1446,12 @@ export default function App() {
                         </div>
                         
                         {data.tags.length === 0 ? (
-                           <div className={`text-center py-10 text-sm font-bold ${t.textM} bg-stone-50 dark:bg-slate-800/50 rounded-2xl`}>尚無建立任何標籤</div>
+                           <div className={`text-center py-10 text-sm font-bold ${t.textM} bg-stone-50 dark:bg-[#161925]/50 rounded-2xl`}>尚無建立任何標籤</div>
                         ) : (
                           <div className="flex flex-wrap gap-3">
                             {data.tags.map(tag => (
                               <div key={tag} className="relative group">
-                                <button onClick={() => !ui.isManageTags && updateUi({filterTags: ui.filterTags.includes(tag) ? ui.filterTags.filter(x=>x!==tag) : [...ui.filterTags,tag]})} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all ${ui.isManageTags ? `${t.bg} ${t.border} pr-10 opacity-70 cursor-default` : ui.filterTags.includes(tag) ? `${t.primary} text-white border-transparent shadow-md` : `${t.bg} ${t.border} hover:border-indigo-500/30`}`}>
+                                <button onClick={() => !ui.isManageTags && updateUi({filterTags: ui.filterTags.includes(tag) ? ui.filterTags.filter(x=>x!==tag) : [...ui.filterTags,tag]})} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all ${ui.isManageTags ? `${t.bg} ${t.border} pr-10 opacity-70 cursor-default` : ui.filterTags.includes(tag) ? `${t.primary} ${t.primaryBtnText} border-transparent shadow-md` : `${t.bg} ${t.border} hover:border-[#E3B59B]/30`}`}>
                                   #{tag}
                                 </button>
                                 {ui.isManageTags && (
@@ -1411,7 +1484,7 @@ export default function App() {
 // ==========================================
 
 // 🌟 記帳表單 (旗艦升級：多幣別選擇 + 彈性比例拆帳 + 沉浸無縫計算機 + 優化標籤與相機)
-const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, onDeleteTx, t, ui }) => {
+const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, onDeleteTx, showToast, t, ui }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, 
     type: initialData?.type || 'expense', 
@@ -1460,7 +1533,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
   const safeTravelCurrencies = settings.travelCurrencies || (settings.travelCurrency ? [{code: settings.travelCurrency, rate: settings.travelRate}] : []);
   const [currency, setCurrency] = useState('TWD');
 
-  const [showK, setShowK] = useState(true);
+  const [showK, setShowK] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [isOCR, setIsOCR] = useState(false);
   const fileInputRef = useRef(null);
@@ -1487,11 +1560,19 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
   const submit = () => { 
     let finalAmount = Number(evaluateMath(data.amount));
     
+    // 🌟 防呆：金額不得為 0 或不合法
+    if (!finalAmount || finalAmount <= 0 || isNaN(finalAmount)) {
+       showToast("請輸入有效金額！", "error");
+       return;
+    }
+
     if (settings.travelMode && currency !== 'TWD' && finalAmount > 0) {
       const c = safeTravelCurrencies.find(x => x.code === currency);
       if (c) {
         finalAmount = Math.round(finalAmount * c.rate);
-        data.note = `[${c.code} ${data.amount}] ${data.note}`;
+        const cName = getCurrencyName(c.code);
+        const amtStr = Number(evaluateMath(data.amount)).toFixed(2);
+        data.note = `[${cName} ${c.code} ${amtStr}] ${data.note}`.trim();
       }
     }
 
@@ -1534,7 +1615,6 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
     }
   };
 
-  // 🌟 還原為原本的 AI API 設定
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !apiKey) return alert("請先在程式碼最上方設定您的 Gemini API Key");
@@ -1602,7 +1682,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         </div>
 
         {!initialData && (
-          <button onClick={onAI} className={`w-full py-4 rounded-2xl text-base font-bold flex justify-center items-center gap-2 ${t.primary} text-white shadow-md active:scale-95 transition-all hover:brightness-110`}>
+          <button onClick={onAI} className={`w-full py-4 rounded-2xl text-base font-bold flex justify-center items-center gap-2 ${t.primary} ${t.primaryBtnText} shadow-md active:scale-95 transition-all hover:brightness-110`}>
             <Wand2 className="w-5 h-5" /> AI 語音 / 文字智能記帳
           </button>
         )}
@@ -1614,7 +1694,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         </div>
         
         {data.type === 'transfer' ? (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 pt-2">
             <div className="space-y-2">
               <label className={`font-bold text-xs ${t.textM} px-1`}>從 (轉出)</label>
               <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1 shadow-inner`}>
@@ -1630,9 +1710,9 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-4 gap-3 pt-2">
             {cats[data.type] && cats[data.type].map(c => (
-              <button key={c.name} onClick={() => setData({...data, category: c.name})} className={`py-4 rounded-3xl border ${data.category === c.name ? t.primary + ' text-white border-transparent shadow-lg scale-105' : `${t.bg} ${t.border} shadow-sm hover:shadow-md`} flex flex-col items-center transition-all active:scale-95`}>
+              <button key={c.name} onClick={() => setData({...data, category: c.name})} className={`py-4 rounded-3xl border ${data.category === c.name ? t.primary + ' ' + t.primaryBtnText + ' border-transparent shadow-lg scale-105' : `${t.bg} ${t.border} shadow-sm hover:shadow-md`} flex flex-col items-center transition-all active:scale-95`}>
                 <span className="text-3xl mb-2 drop-shadow-sm">{c.icon}</span><span className="text-xs font-bold">{c.name}</span>
               </button>
             ))}
@@ -1640,7 +1720,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         )}
 
         {data.type !== 'transfer' && (
-          <div className="space-y-2">
+          <div className="space-y-2 pt-2">
             <label className={`font-bold text-xs ${t.textM} px-1`}>帳戶 (系統會自動判斷付款人)</label>
             <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1 shadow-inner`}>
                {accounts.map(a => (
@@ -1684,42 +1764,36 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         )}
         
         {/* 🌟 日期與時間選擇器 */}
-        <div className="flex gap-4 relative">
+        <div className="flex gap-4 relative pt-2">
           <div className="flex-1 space-y-2 relative">
             <label className={`font-bold text-xs ${t.textM} px-1`}>日期</label>
-            <div className="relative">
-              <input 
-                type="text" 
-                value={displayDate} 
-                onChange={handleDateType} 
-                placeholder="DD/MM/YYYY" 
-                maxLength={10} 
-                className={`w-full p-4 pr-12 rounded-2xl ${t.bg} border ${t.border} font-bold text-sm outline-none focus:ring-2 ${t.ring} shadow-inner transition-all`} 
-              />
-              <div className="absolute right-0 top-0 bottom-0 w-12 flex items-center justify-center overflow-hidden pointer-events-none">
-                <Calendar className={`w-5 h-5 ${t.textM}`} />
+            <div className="relative group">
+              <div className={`flex items-center justify-between p-4 rounded-xl border ${t.border} ${t.bg} shadow-sm group-focus-within:ring-2 ${t.ring} transition-all`}>
+                <div className="flex items-center gap-2">
+                  <Calendar className={`w-5 h-5 ${t.textM}`} />
+                  <span className={`font-bold text-sm ${displayDate ? t.text : t.textM}`}>{displayDate || 'DD/MM/YYYY'}</span>
+                </div>
+                <Calendar className={`w-4 h-4 ${t.textM} opacity-50`} />
               </div>
-              <input 
-                type="date" 
-                value={data.recordDate} 
-                onChange={handleDateSelect} 
-                className="absolute right-0 top-0 w-12 h-full opacity-0 cursor-pointer" 
-              />
+              <input type="date" value={data.recordDate} onChange={handleDateSelect} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
             </div>
           </div>
-          <div className="flex-1 space-y-2">
+          <div className="flex-1 space-y-2 relative">
             <label className={`font-bold text-xs ${t.textM} px-1`}>時間</label>
-            <input 
-              type="time" 
-              value={data.recordTime} 
-              onChange={e => setData({...data, recordTime: e.target.value})} 
-              className={`w-full p-4 rounded-2xl ${t.bg} border ${t.border} font-bold text-sm outline-none focus:ring-2 ${t.ring} shadow-inner transition-all`} 
-            />
+            <div className="relative group">
+              <div className={`flex items-center justify-between p-4 rounded-xl border ${t.border} ${t.bg} shadow-sm group-focus-within:ring-2 ${t.ring} transition-all`}>
+                <div className="flex items-center gap-2">
+                  <CalendarClock className={`w-5 h-5 ${t.textM}`} />
+                  <span className={`font-bold text-sm ${data.recordTime ? t.text : t.textM}`}>{data.recordTime || 'HH:mm'}</span>
+                </div>
+              </div>
+              <input type="time" value={data.recordTime} onChange={e => setData({...data, recordTime: e.target.value})} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+            </div>
           </div>
         </div>
 
         {/* 🌟 標籤橫向滑動列 (完全美化版) */}
-        <div className="space-y-2 -mx-6 px-6">
+        <div className="space-y-2 -mx-6 px-6 pt-2">
           <label className={`font-bold text-xs ${t.textM} px-1`}>快速標籤</label>
           <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2">
              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[1rem] ${t.bg} border ${t.border} shadow-inner shrink-0 focus-within:ring-2 ${t.ring} transition-all`}>
@@ -1730,7 +1804,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
                 <button 
                   key={tg} 
                   onClick={() => setData(prev => ({...prev, tags: prev.tags.includes(tg) ? prev.tags.filter(x=>x!==tg) : [...prev.tags, tg]}))} 
-                  className={`shrink-0 px-4 py-2.5 rounded-[1rem] text-xs font-bold transition-all ${data.tags.includes(tg) ? `${t.primary} text-white shadow-md border-transparent` : `${t.bg} border ${t.border} ${t.textM} hover:border-indigo-500/30`}`}
+                  className={`shrink-0 px-4 py-2.5 rounded-[1rem] text-xs font-bold transition-all ${data.tags.includes(tg) ? `${t.primary} ${t.primaryBtnText} shadow-md border-transparent` : `${t.bg} border ${t.border} ${t.textM} hover:border-[#E3B59B]/30`}`}
                 >
                   #{tg}
                 </button>
@@ -1739,7 +1813,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         </div>
 
         {/* 🌟 無縫融合的備註與 OCR 相機 */}
-        <div className="space-y-2 pb-4">
+        <div className="space-y-2 pb-4 pt-2">
            <label className={`font-bold text-xs ${t.textM} px-1`}>備註與收據掃描</label>
            <div className={`flex items-center p-1.5 rounded-2xl ${t.bg} border ${t.border} shadow-inner focus-within:ring-2 ${t.ring} transition-all`}>
               <input 
@@ -1762,7 +1836,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         {/* 🌟 編輯模式的刪除按鈕 */}
         {initialData && (
            <div className="pt-2">
-             <button onClick={(e) => { e.preventDefault(); onDeleteTx(initialData.id); }} className="w-full py-4 rounded-[1.25rem] font-bold text-rose-500 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-rose-100">
+             <button onClick={(e) => { e.preventDefault(); onDeleteTx(initialData.id); }} className={`w-full py-4 rounded-[1.25rem] font-bold text-rose-500 ${ui.isDark ? 'bg-red-950/30 border-red-900/50 hover:bg-red-900/50' : 'bg-red-50 border-red-100 hover:bg-red-100'} active:scale-95 transition-all flex items-center justify-center gap-2 shadow-sm`}>
                <Trash2 className="w-5 h-5" /> 刪除這筆紀錄
              </button>
            </div>
@@ -1772,11 +1846,11 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       {/* ======================================= */}
       {/* 🌟 底部沉浸式面板：無縫計算機與金額顯示 */}
       {/* ======================================= */}
-      <div className={`shrink-0 ${t.cardInner} shadow-[0_-10px_40px_rgba(0,0,0,0.06)] border-t ${t.border} z-20 pb-safe transition-all duration-300 rounded-t-3xl mt-2`}>
+      <div className={`shrink-0 ${t.cardInner} shadow-[0_-10px_40px_rgba(0,0,0,0.06)] border-t ${t.border} z-20 pb-safe transition-all duration-300 rounded-t-[2.5rem] mt-2`}>
         
         {/* iOS-style Pull Handle */}
         <div className="w-full flex justify-center pt-3 pb-1 cursor-pointer" onClick={() => setShowK(!showK)}>
-            <div className={`w-12 h-1.5 rounded-full transition-colors ${ui.isDark ? 'bg-[#3F3F46]' : 'bg-[#D4D4D8]'}`}></div>
+            <div className={`w-12 h-1.5 rounded-full transition-colors ${ui.isDark ? 'bg-white/10' : 'bg-[#D4D4D8]'}`}></div>
         </div>
 
         {/* 🌟 旅遊外幣切換器 (若開啟) */}
@@ -1784,61 +1858,64 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
           <div className="flex gap-2 overflow-x-auto hide-scrollbar px-6 pt-2">
              <button 
                onClick={() => setCurrency('TWD')} 
-               className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${currency === 'TWD' ? `${t.primary} text-white shadow-sm` : `${t.bg} ${t.textM} border ${t.border}`}`}
+               className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${currency === 'TWD' ? `${t.primary} ${t.primaryBtnText} shadow-sm` : `${t.bg} ${t.textM} border ${t.border}`}`}
              >
-               TWD 台幣
+               台灣 (TWD)
              </button>
-             {safeTravelCurrencies.map(c => (
-               <button 
-                 key={c.code} 
-                 onClick={() => setCurrency(c.code)} 
-                 className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${currency === c.code ? `bg-[#0EA5E9] text-white shadow-sm` : `${t.bg} ${t.textM} border ${t.border}`}`}
-               >
-                 {c.code}
-               </button>
-             ))}
+             {safeTravelCurrencies.map(c => {
+               const label = `${getCurrencyName(c.code)} (${c.code})`;
+               return (
+                 <button 
+                   key={c.code} 
+                   onClick={() => setCurrency(c.code)} 
+                   className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${currency === c.code ? `${t.primary} ${t.primaryBtnText} shadow-sm` : `${t.bg} ${t.textM} border ${t.border}`}`}
+                 >
+                   {label}
+                 </button>
+               )
+             })}
           </div>
         )}
 
         {/* 🌟 金額橫幅 */}
         <div 
-           className={`p-6 flex items-center justify-between cursor-pointer transition-colors`}
+           className={`p-6 flex items-center justify-between cursor-pointer transition-colors border-b border-dashed ${ui.isDark ? 'border-white/5 hover:bg-white/5' : 'border-[#E4E4E7] hover:bg-stone-50/50'}`}
            onClick={() => !showK && setShowK(true)}
         >
            <div className="flex items-center gap-3">
               <div className={`p-2.5 rounded-xl ${t.bg} shadow-inner border ${t.border} ${showK ? 'text-indigo-500' : t.textM} transition-colors`}>
                  <Keyboard className="w-5 h-5" />
               </div>
-              <span className={`font-bold text-sm ${currency !== 'TWD' ? 'text-[#0EA5E9]' : t.textM}`}>
-                {currency !== 'TWD' ? `輸入外幣 (${currency})` : '輸入金額'}
+              <span className={`font-bold text-sm ${currency !== 'TWD' ? t.primaryText : t.textM}`}>
+                {currency !== 'TWD' ? `${getCurrencyName(currency)} (${currency})` : '台灣 (TWD)'}
               </span>
            </div>
-           <span className={`text-[2.5rem] leading-none font-black tracking-tighter ${currency !== 'TWD' ? 'text-[#0EA5E9]' : t.text} truncate max-w-[200px] text-right drop-shadow-sm`}>
+           <span className={`text-[2.5rem] leading-none font-black tracking-tighter ${currency !== 'TWD' ? t.primaryText : t.text} truncate max-w-[200px] text-right drop-shadow-sm`}>
               {data.amount || '0'}
            </span>
         </div>
 
         {/* 🌟 沉浸式無縫鍵盤區 */}
-        <div className={`transition-all duration-300 ease-in-out ${showK ? 'max-h-[350px] opacity-100 px-4 pb-4' : 'max-h-0 opacity-0 overflow-hidden py-0 px-4'}`}>
+        <div className={`transition-all duration-300 ease-in-out ${showK ? 'max-h-[350px] opacity-100 px-4 pb-4 pt-3' : 'max-h-0 opacity-0 overflow-hidden py-0 px-4 pt-0'}`}>
           <div className="grid grid-cols-4 gap-2">
             {['7','8','9','÷', '4','5','6','×', '1','2','3','-', 'C','0','.','+', '⌫','00','=','OK'].map((k, i) => {
               const isOp = ['÷','×','-','+','='].includes(k);
               const isC = k === 'C' || k === '⌫';
               let btnClass = '';
               if (ui.isDark) {
-                if (isOp) btnClass = 'bg-[#18181B] text-rose-400 border border-[#27272A] hover:bg-[#27272A] shadow-sm'; 
-                else if (isC) btnClass = 'bg-[#18181B] text-[#A1A1AA] border border-[#27272A] hover:bg-[#27272A] shadow-sm'; 
-                else btnClass = 'bg-[#27272A] text-white shadow-md hover:bg-[#3F3F46] border border-[#3F3F46]'; 
+                if (isOp) btnClass = 'bg-black/20 text-rose-400 border border-white/5 hover:bg-black/40 shadow-sm'; 
+                else if (isC) btnClass = 'bg-black/20 text-[#A1A1AA] border border-white/5 hover:bg-black/40 shadow-sm'; 
+                else btnClass = 'bg-white/5 text-white shadow-sm hover:bg-white/10 border border-white/5'; 
               } else {
-                if (isOp) btnClass = 'bg-white text-rose-500 border border-[#E4E4E7] hover:bg-rose-50 shadow-sm'; 
-                else if (isC) btnClass = 'bg-white text-[#71717A] border border-[#E4E4E7] hover:bg-stone-50 shadow-sm'; 
+                if (isOp) btnClass = 'bg-stone-50 text-rose-500 border border-[#E4E4E7] hover:bg-stone-100 shadow-sm'; 
+                else if (isC) btnClass = 'bg-stone-100 text-[#71717A] border border-[#E4E4E7] hover:bg-stone-200 shadow-sm'; 
                 else btnClass = 'bg-white text-[#09090B] shadow-md border border-[#E4E4E7] hover:bg-stone-50'; 
               }
               return (
                 <button 
                   key={i} 
                   onClick={(e) => { e.stopPropagation(); k === 'OK' ? submit() : handleKey(k); }} 
-                  className={`h-[56px] sm:h-[64px] rounded-[1rem] font-black text-[22px] active:scale-95 transition-all duration-150 ${k === 'OK' ? `col-span-1 ${t.primary} text-white shadow-lg hover:brightness-110` : btnClass}`}
+                  className={`h-[56px] sm:h-[64px] rounded-[1rem] font-black text-[22px] active:scale-95 transition-all duration-150 ${k === 'OK' ? `col-span-1 ${t.primary} ${t.primaryBtnText} shadow-lg hover:brightness-110` : btnClass}`}
                 >
                   {k}
                 </button>
@@ -1848,8 +1925,8 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         </div>
 
         {/* 🌟 鍵盤收合時，顯示單一確認按鈕 (無縫過渡) */}
-        <div className={`px-5 transition-all duration-300 ease-in-out ${!showK ? 'max-h-[100px] opacity-100 pb-5 pt-2' : 'max-h-0 opacity-0 overflow-hidden py-0'}`}>
-           <button onClick={submit} className={`w-full py-4 rounded-[1.25rem] font-black text-xl text-white shadow-lg active:scale-95 transition-all hover:brightness-110 ${t.primary}`}>
+        <div className={`px-5 transition-all duration-300 ease-in-out ${!showK ? 'max-h-[100px] opacity-100 pb-6 pt-3' : 'max-h-0 opacity-0 overflow-hidden py-0'}`}>
+           <button onClick={submit} className={`w-full py-4 rounded-[1.25rem] font-black text-xl ${t.primaryBtnText} shadow-lg active:scale-95 transition-all hover:brightness-110 ${t.primary}`}>
              確認{initialData ? '修改' : '記帳'}
            </button>
         </div>
@@ -1938,7 +2015,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
         />
         <button 
           onClick={toggleListening} 
-          className={`absolute bottom-6 right-6 p-5 rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.15)] transition-all ${isListening ? 'bg-rose-500 text-white animate-pulse scale-110' : `${t.primary} text-white hover:scale-105 active:scale-95`}`}
+          className={`absolute bottom-6 right-6 p-5 rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.15)] transition-all ${isListening ? 'bg-rose-500 text-white animate-pulse scale-110' : `${t.primary} ${t.primaryBtnText} hover:scale-105 active:scale-95`}`}
         >
           {isListening ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
         </button>
@@ -1946,7 +2023,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
       <button 
         onClick={handleParse} 
         disabled={loading || !text} 
-        className={`w-full py-5 rounded-2xl font-black text-xl ${t.primary} text-white flex justify-center items-center gap-2 mt-3 shrink-0 shadow-lg disabled:opacity-50 active:scale-95 transition-all hover:brightness-110`}
+        className={`w-full py-5 rounded-2xl font-black text-xl ${t.primary} ${t.primaryBtnText} flex justify-center items-center gap-2 mt-3 shrink-0 shadow-lg disabled:opacity-50 active:scale-95 transition-all hover:brightness-110`}
       >
         {loading ? <Loader2 className="animate-spin w-6 h-6"/> : <Sparkles className="w-6 h-6"/>} 交給 AI 自動解析
       </button>
@@ -1999,7 +2076,7 @@ const CategoryForm = ({ categories, onSave, t }) => {
                placeholder="分類名稱"
                className={`flex-1 p-4 rounded-xl font-bold text-base ${t.cardInner} border ${t.border} outline-none focus:ring-2 ${t.ring} shadow-sm`} 
             />
-            <button onClick={handleAdd} disabled={!newName} className={`px-6 rounded-xl font-bold text-white shadow-md disabled:opacity-50 active:scale-95 transition-all ${t.primary}`}><Plus className="w-6 h-6"/></button>
+            <button onClick={handleAdd} disabled={!newName} className={`px-6 rounded-xl font-bold ${t.primaryBtnText} shadow-md disabled:opacity-50 active:scale-95 transition-all ${t.primary}`}><Plus className="w-6 h-6"/></button>
          </div>
        </div>
 
@@ -2017,7 +2094,7 @@ const CategoryForm = ({ categories, onSave, t }) => {
          </div>
        </div>
 
-       <button onClick={() => onSave(cats)} className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white shadow-lg mt-auto active:scale-95 transition-all hover:brightness-110 ${t.primary}`}>
+       <button onClick={() => onSave(cats)} className={`w-full py-5 rounded-[1.5rem] font-bold text-lg ${t.primaryBtnText} shadow-lg mt-auto active:scale-95 transition-all hover:brightness-110 ${t.primary}`}>
           儲存分類設定
        </button>
     </div>
@@ -2031,26 +2108,30 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, onCategories, t
   const [s, setS] = useState(settings);
   const [newCurr, setNewCurr] = useState('');
   const [isFetchingRate, setIsFetchingRate] = useState(false);
-  const isDark = t.bg.includes('09090B') || t.bg.includes('020617'); 
-
-  // 常見貨幣清單
-  const POPULAR_CURRENCIES = [
-    { code: 'JPY', name: '日圓' },
-    { code: 'USD', name: '美元' },
-    { code: 'EUR', name: '歐元' },
-    { code: 'KRW', name: '韓元' },
-    { code: 'HKD', name: '港幣' },
-    { code: 'THB', name: '泰銖' },
-    { code: 'GBP', name: '英鎊' },
-    { code: 'AUD', name: '澳幣' },
-    { code: 'CNY', name: '人民幣' },
-    { code: 'SGD', name: '新加坡幣' },
-  ];
+  const isDark = t.bg.includes('16') || t.bg.includes('0B'); 
 
   // 🌟 智慧外幣下拉自動抓取
   const handleAddCurrency = async () => {
     let targetCurrency = newCurr.trim().toUpperCase();
     if (!targetCurrency) return;
+    
+    // 智慧辨識中文或簡稱
+    const currencyMap = {
+      '日': 'JPY', 'jpy': 'JPY', '韓': 'KRW', 'krw': 'KRW', '美': 'USD', 'usd': 'USD', '歐': 'EUR', 'eur': 'EUR',
+      '港': 'HKD', 'hkd': 'HKD', '泰': 'THB', 'thb': 'THB', '英': 'GBP', 'gbp': 'GBP', '澳': 'AUD', 'aud': 'AUD',
+      '加': 'CAD', 'cad': 'CAD', '新': 'SGD', 'sgd': 'SGD', '馬': 'MYR', 'myr': 'MYR', '越': 'VND', 'vnd': 'VND',
+      '印尼': 'IDR', 'idr': 'IDR', '人民幣': 'CNY', '中': 'CNY', 'cny': 'CNY', 'rmb': 'CNY', 'RMB': 'CNY',
+      '阿': 'AED', '阿聯酋': 'AED', '杜拜': 'AED', 'aed': 'AED', '埃及': 'EGP', 'egp': 'EGP'
+    };
+    
+    for (const [key, value] of Object.entries(currencyMap)) { 
+      if (targetCurrency.includes(key)) { 
+        targetCurrency = value; 
+        break; 
+      } 
+    }
+    
+    if (targetCurrency.length !== 3) return alert("請輸入正確的國家關鍵字或 3 碼幣別 (例如: 杜拜 或 JPY)");
     
     // 檢查是否已存在
     const currentList = s.travelCurrencies || [];
@@ -2117,7 +2198,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, onCategories, t
       {/* ✈️ 旅遊多幣別模式 (陣列版 + API 下拉選單) */}
       <div className={`${t.bg} rounded-3xl p-5 border ${t.border} shadow-sm space-y-4`}>
          <div className="flex justify-between items-center">
-           <h4 className={`font-bold text-base flex items-center gap-2 ${s.travelMode ? 'text-[#0EA5E9]' : t.text}`}><Globe className="w-5 h-5"/> 多點跨國旅行模式</h4>
+           <h4 className={`font-bold text-base flex items-center gap-2 ${s.travelMode ? t.primaryText : t.text}`}><Globe className="w-5 h-5"/> 多點跨國旅行模式</h4>
            <ToggleSwitch checked={s.travelMode} onChange={val => setS({...s, travelMode: val})} isDark={isDark} />
          </div>
          {s.travelMode && (
@@ -2132,12 +2213,12 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, onCategories, t
                  placeholder="輸入國家或選擇幣別..."
                />
                <datalist id="currency-options">
-                 {POPULAR_CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                 {POPULAR_CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}
                </datalist>
                <button 
                  onClick={handleAddCurrency} 
                  disabled={!newCurr || isFetchingRate} 
-                 className={`w-14 rounded-xl text-sm font-bold text-white bg-[#0EA5E9] active:scale-95 shadow-md flex items-center justify-center disabled:opacity-50 transition-all hover:bg-[#0284C7]`}
+                 className={`w-14 rounded-xl text-sm font-bold ${t.primaryBtnText} ${t.primary} active:scale-95 shadow-md flex items-center justify-center disabled:opacity-50 transition-all hover:brightness-110`}
                >
                  {isFetchingRate ? <Loader2 className="animate-spin w-5 h-5"/> : <Plus className="w-6 h-6"/>}
                </button>
@@ -2146,7 +2227,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, onCategories, t
              <div className="space-y-2 relative">
                {(s.travelCurrencies || []).length > 0 && (
                  <div className="flex justify-end mb-2">
-                   <button onClick={handleRefreshAllRates} disabled={isFetchingRate} className={`text-xs font-bold text-[#0EA5E9] flex items-center gap-1 hover:underline disabled:opacity-50`}>
+                   <button onClick={handleRefreshAllRates} disabled={isFetchingRate} className={`text-xs font-bold ${t.primaryText} flex items-center gap-1 hover:underline disabled:opacity-50`}>
                      <RefreshCw className={`w-3.5 h-3.5 ${isFetchingRate ? 'animate-spin' : ''}`} /> 一鍵更新最新匯率
                    </button>
                  </div>
@@ -2154,7 +2235,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, onCategories, t
 
                {(s.travelCurrencies || []).map(c => (
                  <div key={c.code} className={`flex justify-between items-center p-3.5 rounded-2xl ${t.cardInner} border ${t.border} shadow-sm hover:shadow-md transition-all`}>
-                   <span className={`font-black text-sm text-[#0EA5E9] w-12`}>{c.code}</span>
+                   <span className={`font-black text-sm ${t.primaryText} w-24 truncate`}>{getCurrencyLabel(c.code)}</span>
                    <div className="flex items-center gap-2">
                      <span className={`text-xs ${t.textM}`}>對台幣</span>
                      <input 
@@ -2165,13 +2246,13 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, onCategories, t
                           const newArr = s.travelCurrencies.map(x => x.code === c.code ? {...x, rate: Number(e.target.value)} : x);
                           setS({...s, travelCurrencies: newArr});
                        }} 
-                       className={`w-24 ${t.bg} p-2 rounded-xl font-bold text-center border ${t.border} outline-none shadow-inner text-[#0EA5E9]`} 
+                       className={`w-24 ${t.bg} p-2 rounded-xl font-bold text-center border ${t.border} outline-none shadow-inner ${t.primaryText}`} 
                      />
                    </div>
                    <button onClick={() => handleRemoveCurrency(c.code)} className={`text-stone-400 hover:text-red-500 transition-colors p-1`}><Trash2 className="w-4 h-4"/></button>
                  </div>
                ))}
-               {(s.travelCurrencies || []).length === 0 && <p className={`text-center text-xs font-bold ${t.textM} py-4 bg-stone-50 dark:bg-white/5 rounded-xl`}>尚未加入任何外幣</p>}
+               {(s.travelCurrencies || []).length === 0 && <p className={`text-center text-xs font-bold ${t.textM} py-4 bg-black/5 dark:bg-white/5 rounded-xl`}>尚未加入任何外幣</p>}
              </div>
            </div>
          )}
@@ -2259,14 +2340,14 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, onCategories, t
 
       <button 
         onClick={() => onSave(s)} 
-        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white mt-4 shadow-lg ${t.primary} active:scale-95 transition-all hover:brightness-110`}
+        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg ${t.primaryBtnText} mt-4 shadow-lg ${t.primary} active:scale-95 transition-all hover:brightness-110`}
       >
         儲存設定
       </button>
       
       <button 
         onClick={onExport} 
-        className={`w-full py-5 rounded-[1.5rem] font-bold text-base border ${t.border} mt-2 shadow-sm flex items-center justify-center gap-2 text-emerald-600 dark:text-emerald-400 ${t.bg} active:scale-95 transition-all hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:border-emerald-500/30`}
+        className={`w-full py-5 rounded-[1.5rem] font-bold text-base border ${t.border} mt-2 shadow-sm flex items-center justify-center gap-2 text-emerald-600 dark:text-emerald-400 ${t.bg} active:scale-95 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:border-emerald-500/30`}
       >
         <DownloadCloud className="w-5 h-5"/> 匯出 CSV 報表
       </button>
@@ -2316,7 +2397,7 @@ const BarcodeForm = ({ codes, onSave, t }) => {
             <label className={`text-xs font-bold ${t.textM} px-1`}>{tab === 'h' ? '老公' : '老婆'} 手機條碼</label>
             <input value={tab === 'h' ? h : w} onChange={e => tab === 'h' ? setH(e.target.value.toUpperCase()) : setW(e.target.value.toUpperCase())} className={`w-full p-4 rounded-xl uppercase font-mono text-lg font-bold ${t.cardInner} border ${t.border} shadow-inner outline-none focus:ring-2 ${t.ring} transition-all`} placeholder="/..." />
           </div>
-          <button onClick={() => { onSave(h, w); setMode('view'); }} className={`w-full py-4 rounded-[1.25rem] font-bold text-base text-white shadow-md ${t.primary} mt-2 active:scale-95 transition-all hover:brightness-110`}>儲存設定</button>
+          <button onClick={() => { onSave(h, w); setMode('view'); }} className={`w-full py-4 rounded-[1.25rem] font-bold text-base ${t.primaryBtnText} shadow-md ${t.primary} mt-2 active:scale-95 transition-all hover:brightness-110`}>儲存設定</button>
         </div>
       )}
     </div>
@@ -2378,13 +2459,13 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
               </div>
             </div>
           </div>
-          <button onClick={() => setStep(2)} disabled={!r.name} className={`w-full py-5 rounded-2xl font-bold text-lg ${t.primary} text-white shadow-md disabled:opacity-50 mt-auto active:scale-95 transition-all`}>下一步</button>
+          <button onClick={() => setStep(2)} disabled={!r.name} className={`w-full py-5 rounded-2xl font-bold text-lg ${t.primary} ${t.primaryBtnText} shadow-md disabled:opacity-50 mt-auto active:scale-95 transition-all`}>下一步</button>
         </div>
       )}
       {step === 2 && (
         <div className="space-y-5 flex-1 flex flex-col animate-in slide-in-from-right-2">
           <p className={`font-bold text-xs ${t.textM} px-1`}>設定時間到了要自動記下的內容：</p>
-          <TxForm accounts={accounts} cats={cats} tags={[]} initialData={null} templates={[]} settings={{}} onAI={()=>{}} onAddTag={()=>{}} onSaveTemplate={()=>{}} onDeleteTemplate={()=>{}} onSave={(txData) => { setR({ ...r, txData }); setStep(3); }} t={t} ui={{isDark: t.bg.includes('09')}} />
+          <TxForm accounts={accounts} cats={cats} tags={[]} initialData={null} templates={[]} settings={{}} onAI={()=>{}} onAddTag={()=>{}} onSaveTemplate={()=>{}} onDeleteTemplate={()=>{}} onSave={(txData) => { setR({ ...r, txData }); setStep(3); }} showToast={()=>{}} t={t} ui={{isDark: t.bg.includes('16') || t.bg.includes('0B')}} />
         </div>
       )}
       {step === 3 && (
@@ -2397,7 +2478,7 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
             <hr className={t.border} />
             <p className="flex justify-between items-center"><span className={`text-sm ${t.textM} font-bold`}>內容：</span><span className="font-black text-2xl drop-shadow-sm">{r.txData.type === 'transfer' ? '轉帳' : r.txData.category} ${r.txData.amount}</span></p>
           </div>
-          <button onClick={() => { onSave({ ...r, nextDueDate: new Date(), createdAt: serverTimestamp() }); setView('list'); }} className={`w-full py-5 rounded-2xl font-black text-lg ${t.primary} text-white shadow-lg mt-auto active:scale-95 transition-all hover:brightness-110`}>確認建立</button>
+          <button onClick={() => { onSave({ ...r, nextDueDate: new Date(), createdAt: serverTimestamp() }); setView('list'); }} className={`w-full py-5 rounded-2xl font-black text-lg ${t.primary} ${t.primaryBtnText} shadow-lg mt-auto active:scale-95 transition-all hover:brightness-110`}>確認建立</button>
         </div>
       )}
     </div>
@@ -2426,7 +2507,7 @@ const AccForm = ({ onSave, t }) => {
             <button 
               key={x} 
               onClick={() => setI(x)} 
-              className={`p-4 border rounded-2xl shrink-0 transition-all ${i === x ? `${t.primaryText} ${t.bg} border-transparent shadow-md scale-105` : `${t.border} ${t.cardInner} hover:bg-stone-50 dark:hover:bg-slate-800`}`}
+              className={`p-4 border rounded-2xl shrink-0 transition-all ${i === x ? `${t.primaryText} ${t.bg} border-transparent shadow-md scale-105` : `${t.border} ${t.cardInner} hover:bg-black/5 dark:hover:bg-white/5`}`}
             >
               {x}
             </button>
@@ -2436,7 +2517,7 @@ const AccForm = ({ onSave, t }) => {
       <button 
         onClick={() => onSave({name:n, type:'joint', icon:i, balance:0})} 
         disabled={!n} 
-        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all hover:brightness-110`}
+        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg ${t.primaryBtnText} shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all hover:brightness-110`}
       >
         建立帳戶
       </button>
@@ -2486,7 +2567,7 @@ const BillForm = ({ onSave, t }) => {
       <button 
         onClick={() => onSave({name:n, amount:Number(a), dueDate:Number(d), icon:'🧾'})} 
         disabled={!n || !a} 
-        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all hover:brightness-110`}
+        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg ${t.primaryBtnText} shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all hover:brightness-110`}
       >
         建立帳單
       </button>
@@ -2518,7 +2599,7 @@ const NoteForm = ({ data, onSave, onDelete, t }) => {
       <button 
         onClick={() => onSave({id:data?.id, title:ti, content:c})} 
         disabled={!ti && !c} 
-        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all hover:brightness-110`}
+        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg ${t.primaryBtnText} shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all hover:brightness-110`}
       >
         儲存筆記
       </button>
@@ -2626,7 +2707,7 @@ const GoalForm = ({ onSave, t }) => {
       <button 
         onClick={() => onSave({title:ti, targetAmount:Number(a)})} 
         disabled={!ti || !a} 
-        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all hover:brightness-110`}
+        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg ${t.primaryBtnText} shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all hover:brightness-110`}
       >
         建立願望
       </button>
@@ -2651,7 +2732,7 @@ const FundForm = ({ goal, onSave, t }) => {
       <button 
         onClick={() => onSave(Number(a))} 
         disabled={!a} 
-        className={`w-full py-5 rounded-[1.5rem] font-black text-xl text-white shadow-lg ${t.primary} disabled:opacity-50 mt-10 active:scale-95 transition-all hover:brightness-110`}
+        className={`w-full py-5 rounded-[1.5rem] font-black text-xl ${t.primaryBtnText} shadow-lg ${t.primary} disabled:opacity-50 mt-10 active:scale-95 transition-all hover:brightness-110`}
       >
         確認存入
       </button>
