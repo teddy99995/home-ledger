@@ -3,7 +3,7 @@ import {
   Plus, X, Trash2, Sparkles, ChevronLeft, ChevronRight, Target, Coins, 
   PieChart as PieChartIcon, ArrowRightLeft, Home, Search, Settings, CheckCircle2, AlertTriangle,
   Barcode, Camera, ClipboardList, StickyNote, Edit3, CalendarHeart, Mic, MicOff,
-  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane, ArrowRight, Tag, ReceiptText, Keyboard, Calendar, TrendingUp, TrendingDown, Globe
+  Wallet, CalendarClock, Check, ShoppingCart, DownloadCloud, ChevronDown, ChevronUp, Moon, Sun, Filter, Wand2, Bell, Repeat, Loader2, Save, Plane, ArrowRight, Tag, ReceiptText, Keyboard, Calendar, TrendingUp, TrendingDown, Globe, Lock, Archive, ArchiveRestore, List
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -28,12 +28,10 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || 
-               (typeof process !== 'undefined' && process.env?.REACT_APP_GEMINI_API_KEY) || 
-               ""; 
+const apiKey = ""; 
 
-// 🌟 純家庭帳本分類設定 (加入飲料與電話費)
-const CATEGORIES = {
+// 🌟 預設家庭帳本分類設定
+const DEFAULT_CATEGORIES = {
   expense: [
     { name: '餐飲', icon: '🍽️', color: '#D4A373' }, 
     { name: '飲料', icon: '🧋', color: '#E9C46A' }, 
@@ -103,10 +101,45 @@ const ToggleSwitch = ({ checked, onChange, isDark }) => (
 
 const ArrowDownIconSVG = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 5v14M19 12l-7 7-7-7"/></svg>;
 
+// 🌟 年度趨勢折線圖組件
+const LineChart = ({ data, t }) => {
+  if (!data || data.length === 0) return null;
+  const maxVal = Math.max(...data.map(d => Math.max(d.inc, d.exp, 1)));
+  const h = 180, w = 320, pad = 25;
+  const pointsInc = data.map((d, i) => `${pad + (i * (w - 2 * pad)) / 11},${h - pad - (d.inc / maxVal) * (h - 2 * pad)}`).join(' ');
+  const pointsExp = data.map((d, i) => `${pad + (i * (w - 2 * pad)) / 11},${h - pad - (d.exp / maxVal) * (h - 2 * pad)}`).join(' ');
+  
+  return (
+    <div className={`w-full overflow-x-auto hide-scrollbar ${t.cardInner} rounded-3xl p-4 border ${t.border}`}>
+      <h4 className="font-bold text-sm mb-2 flex items-center gap-2"><TrendingUp className="w-4 h-4"/>年度收支趨勢</h4>
+      <div className="flex gap-4 mb-2 justify-center text-xs font-bold">
+        <span className="flex items-center gap-1 text-emerald-500"><div className="w-2 h-2 rounded-full bg-emerald-500"></div>收入</span>
+        <span className="flex items-center gap-1 text-rose-500"><div className="w-2 h-2 rounded-full bg-rose-500"></div>支出</span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto overflow-visible drop-shadow-sm">
+        <line x1={pad} y1={h-pad} x2={w-pad} y2={h-pad} stroke="currentColor" strokeOpacity="0.1" strokeWidth="1" />
+        <line x1={pad} y1={pad} x2={w-pad} y2={pad} stroke="currentColor" strokeOpacity="0.1" strokeWidth="1" />
+        <polyline points={pointsInc} fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-md animate-in fade-in duration-1000" />
+        <polyline points={pointsExp} fill="none" stroke="#F43F5E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-md animate-in fade-in duration-1000 delay-150" />
+        {data.map((d, i) => {
+           const cx = pad + (i * (w - 2 * pad)) / 11;
+           return (
+             <g key={i}>
+                <circle cx={cx} cy={h - pad - (d.inc / maxVal) * (h - 2 * pad)} r="4" fill="#10B981" stroke={t.bg.includes('0F') ? "#1E293B" : "#FFF"} strokeWidth="2" />
+                <circle cx={cx} cy={h - pad - (d.exp / maxVal) * (h - 2 * pad)} r="4" fill="#F43F5E" stroke={t.bg.includes('0F') ? "#1E293B" : "#FFF"} strokeWidth="2" />
+                <text x={cx} y={h - 5} fontSize="10" fill="currentColor" opacity="0.5" textAnchor="middle" fontWeight="bold">{d.month}</text>
+             </g>
+           );
+        })}
+      </svg>
+    </div>
+  );
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [data, setData] = useState({ 
-    tx: [], accounts: [], bills: [], notes: [], shopping: [], goals: [], events: [], tags: [], recurringRules: [], templates: [] 
+    tx: [], accounts: [], bills: [], notes: [], shopping: [], goals: [], events: [], tags: [], recurringRules: [], templates: [], categories: DEFAULT_CATEGORIES 
   });
   
   const [settings, setSettings] = useState({ 
@@ -118,9 +151,10 @@ export default function App() {
   });
   
   const [ui, setUi] = useState(() => {
-    const savedIsDark = localStorage.getItem('homeLedgerTheme') !== 'light';
+    const savedIsDark = localStorage.getItem('homeLedgerTheme') === 'dark';
     return {
-      date: new Date(), tab: 'home', subTab: 'bills', statsView: 'month', chartView: 'expense', modal: null, search: '', filterTags: [], filterAccount: 'all',
+      date: new Date(), dateRange: { start: '', end: '' },
+      tab: 'home', subTab: 'bills', statsView: 'month', chartView: 'expense', modal: null, search: '', filterTags: [], filterAccount: 'all',
       isDark: savedIsDark, confirm: null, selectedItem: null, toast: null, selectedTx: null
     };
   });
@@ -176,21 +210,23 @@ export default function App() {
       onSnapshot(getCol('shared_accounts'), snap => {
         if (snap.empty) {
           const defaults = [
-            { id: 'acc_joint', name: '共同帳戶', type: 'joint', icon: '🏦' }, 
-            { id: 'acc_h', name: '老公帳戶', type: 'husband', icon: '👨' }, 
-            { id: 'acc_w', name: '老婆帳戶', type: 'wife', icon: '👩' }
+            { id: 'acc_joint', name: '共同帳戶', type: 'joint', icon: '🏦', isArchived: false }, 
+            { id: 'acc_h', name: '老公帳戶', type: 'husband', icon: '👨', isArchived: false }, 
+            { id: 'acc_w', name: '老婆帳戶', type: 'wife', icon: '👩', isArchived: false }
           ];
           defaults.forEach(d => setDoc(getDocRef('shared_accounts', d.id), { ...d, createdAt: serverTimestamp() }));
         } else {
           setData(prev => ({ ...prev, accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.createdAt?.toMillis() - b.createdAt?.toMillis()) }));
         }
       }),
+      onSnapshot(getDocRef('shared_settings', 'categories'), doc => {
+        if (doc.exists()) setData(prev => ({ ...prev, categories: doc.data() }));
+        else { setDoc(getDocRef('shared_settings', 'categories'), DEFAULT_CATEGORIES); setData(prev => ({ ...prev, categories: DEFAULT_CATEGORIES })); }
+      }),
       onSnapshot(getDocRef('shared_settings', 'main'), doc => { 
         if (doc.exists()) {
           const d = doc.data();
-          if (!d.travelCurrencies && d.travelCurrency) {
-            d.travelCurrencies = [{code: d.travelCurrency, rate: d.travelRate || 1}];
-          }
+          if (!d.travelCurrencies && d.travelCurrency) d.travelCurrencies = [{code: d.travelCurrency, rate: d.travelRate || 1}];
           setSettings(prev => ({ ...prev, ...d })); 
         }
       }),
@@ -257,11 +293,8 @@ export default function App() {
           await addDoc(getCol('shared_ledger'), newTx);
           
           const next = new Date(dueDate);
-          if (rule.frequency === 'monthly') {
-            next.setMonth(next.getMonth() + rule.interval);
-          } else if (rule.frequency === 'weekly') {
-            next.setDate(next.getDate() + rule.interval * 7);
-          }
+          if (rule.frequency === 'monthly') next.setMonth(next.getMonth() + rule.interval);
+          else if (rule.frequency === 'weekly') next.setDate(next.getDate() + rule.interval * 7);
           
           await updateDoc(getDocRef('recurring_rules', rule.id), { nextDueDate: next });
           processedCount++;
@@ -273,26 +306,29 @@ export default function App() {
     processRules();
   }, [user, data.recurringRules]);
 
+  const activeAccounts = useMemo(() => data.accounts.filter(a => !a.isArchived), [data.accounts]);
+
   const cMonth = getLocalYYYYMM(ui.date);
   const cYear = String(ui.date.getFullYear());
   const mTx = useMemo(() => data.tx.filter(t => t.month === cMonth), [data.tx, cMonth]);
   const yTx = useMemo(() => data.tx.filter(t => t.date.startsWith(cYear)), [data.tx, cYear]);
+  const cTx = useMemo(() => {
+      if (!ui.dateRange.start || !ui.dateRange.end) return [];
+      return data.tx.filter(t => t.date >= ui.dateRange.start && t.date <= ui.dateRange.end);
+  }, [data.tx, ui.dateRange]);
   
-  const filteredMTx = useMemo(() => {
-    if (!ui.filterAccount || ui.filterAccount === 'all') return mTx;
-    return mTx.filter(t => t.accountId === ui.filterAccount);
-  }, [mTx, ui.filterAccount]);
+  const baseTxs = ui.tab === 'stats' ? (ui.statsView === 'month' ? mTx : ui.statsView === 'year' ? yTx : cTx) : mTx;
 
-  const filteredYTx = useMemo(() => {
-    if (!ui.filterAccount || ui.filterAccount === 'all') return yTx;
-    return yTx.filter(t => t.accountId === ui.filterAccount);
-  }, [yTx, ui.filterAccount]);
+  const filteredBaseTxs = useMemo(() => {
+    if (!ui.filterAccount || ui.filterAccount === 'all') return baseTxs;
+    return baseTxs.filter(t => t.accountId === ui.filterAccount);
+  }, [baseTxs, ui.filterAccount]);
 
-  const displayTx = useMemo(() => filteredMTx.filter(t => {
+  const displayTx = useMemo(() => filteredBaseTxs.filter(t => {
     const q = !ui.search || t.category?.includes(ui.search) || t.note?.includes(ui.search);
     const tg = ui.filterTags.length === 0 || ui.filterTags.every(tag => t.tags && t.tags.includes(tag));
     return q && tg;
-  }), [filteredMTx, ui.search, ui.filterTags]);
+  }), [filteredBaseTxs, ui.search, ui.filterTags]);
 
   const calcStats = (txs) => txs.reduce((s, t) => {
     if (t.type === 'transfer') return s;
@@ -306,22 +342,33 @@ export default function App() {
     return s;
   }, { exp: 0, inc: 0, expCat: {}, incCat: {} });
 
-  const hStats = calcStats(filteredMTx); 
-  const tStats = calcStats(ui.statsView === 'month' ? filteredMTx : filteredYTx); 
+  const hStats = calcStats(ui.tab === 'home' ? filteredBaseTxs : mTx); 
+  const tStats = calcStats(filteredBaseTxs); 
 
   const chartData = useMemo(() => {
     const isExp = ui.chartView === 'expense';
     const targetTotal = isExp ? tStats.exp : tStats.inc;
     const targetCat = isExp ? tStats.expCat : tStats.incCat;
     const total = targetTotal || 1;
-    const catList = isExp ? CATEGORIES.expense : CATEGORIES.income;
+    const catList = isExp ? data.categories.expense : data.categories.income;
 
     return Object.entries(targetCat).map(([name, value]) => {
       const catObj = catList.find(c => c.name === name);
       const icon = catObj?.icon || '✨';
       return { name, value, percentage: Math.round((value / total) * 100), icon };
     }).sort((a, b) => b.value - a.value);
-  }, [tStats, ui.chartView]);
+  }, [tStats, ui.chartView, data.categories]);
+
+  const yearTrendData = useMemo(() => {
+      if (ui.statsView !== 'year') return [];
+      return Array.from({length: 12}).map((_, i) => {
+          const m = `${cYear}-${String(i+1).padStart(2, '0')}`;
+          const mmTx = yTx.filter(t => t.month === m);
+          const inc = mmTx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+          const exp = mmTx.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+          return { month: i+1, inc, exp };
+      });
+  }, [yTx, cYear, ui.statsView]);
 
   const rollover = useMemo(() => {
     if (!settings.enableRollover) return { enabled: false, amt: 0, budget: settings.monthlyBudget };
@@ -346,16 +393,14 @@ export default function App() {
   const totalAssets = Object.values(accBal).reduce((s, b) => s + b, 0);
 
   const settlement = useMemo(() => {
-    const activeTxs = ui.statsView === 'month' ? mTx : yTx; 
-    let hOwesW = 0; 
-    let wOwesH = 0; 
+    const activeTxs = baseTxs; 
+    let hOwesW = 0; let wOwesH = 0; 
 
     activeTxs.forEach(t => {
       if (t.type !== 'expense') return;
       if (t.split === 'none') return; 
       
-      let ratioH = 0.5;
-      let ratioW = 0.5;
+      let ratioH = 0.5; let ratioW = 0.5;
       
       if (t.split === 'custom' && t.splitRatio) {
          ratioH = t.splitRatio.h / 100;
@@ -371,7 +416,7 @@ export default function App() {
     if (netWifeOwesHusband > 0.01) return { status: 'unsettled', who: 'wife', to: 'husband', amt: netWifeOwesHusband };
     if (netWifeOwesHusband < -0.01) return { status: 'unsettled', who: 'husband', to: 'wife', amt: Math.abs(netWifeOwesHusband) };
     return { status: 'settled' };
-  }, [mTx, yTx, ui.statsView]);
+  }, [baseTxs]);
 
   const rawAlerts = useMemo(() => {
     const a = []; 
@@ -419,7 +464,11 @@ export default function App() {
     }
   };
   
-  const confirmDel = (msg, action) => updateUi({ confirm: { message: msg, onConfirm: () => doAction(action, "已成功刪除") } });
+  // 🌟 危險操作文字鎖支援
+  const confirmAction = (msg, action, requireText = null) => 
+    updateUi({ confirm: { message: msg, onConfirm: () => doAction(action, "操作成功"), requireText, inputText: '' } });
+
+  const confirmDel = (msg, action) => confirmAction(msg, action);
 
   const handleAddGlobalTag = async (tagName) => {
     if (!tagName.trim() || data.tags.includes(tagName)) return;
@@ -432,7 +481,7 @@ export default function App() {
     try {
       const topExpCats = Object.entries(tStats.expCat).map(([n,v]) => ({name:n, val:v})).sort((a,b)=>b.val-a.val).slice(0,3).map(c => `${c.name}(${Math.round(c.val/(tStats.exp||1)*100)}%)`).join('、');
       let stext = settlement.status === 'settled' ? "無欠款" : (settlement.who === 'husband' ? `老婆需給老公${Math.round(settlement.amt)}` : `老公需給老婆${Math.round(settlement.amt)}`);
-      const prompt = `這是家庭帳本本月紀錄：支出${tStats.exp}元。前三花費:${topExpCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
+      const prompt = `這是家庭帳本本期紀錄：支出${tStats.exp}元。前三花費:${topExpCats || '無'}。結算:${stext}。請用溫馨朋友語氣給一段50字理財建議(不列點)。`;
       
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
       const options = {
@@ -482,6 +531,41 @@ export default function App() {
     try { updateUi({ modal: 'tx', selectedTx: tx }); } catch (e) { showToast("系統載入異常，請重試", "error"); }
   };
 
+  const handleTxSave = (txData) => { 
+      const { id, recordDate, recordTime, ...payload } = txData;
+      payload.updatedAt = serverTimestamp();
+      payload.date = recordDate || getLocalYYYYMMDD(ui.date);
+      payload.month = payload.date.substring(0, 7);
+      payload.recordTime = recordTime || getLocalHHmm(new Date());
+      Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
+      
+      const saveActual = () => {
+          if(id) doAction(() => updateDoc(getDocRef('shared_ledger', id), payload), '修改成功'); 
+          else { payload.createdAt = serverTimestamp(); payload.createdBy = user ? user.uid : 'unknown'; doAction(() => addDoc(getCol('shared_ledger'), payload), '記帳成功'); }
+      };
+
+      // 🛡️ 天價防護
+      if (payload.amount >= 1000000) {
+          confirmAction('金額高達百萬！請輸入確認文字以解鎖', saveActual, '確認解鎖');
+          return;
+      }
+      
+      // 🛡️ 未來日期防穿梭
+      if (payload.date > getLocalYYYYMMDD(new Date())) {
+          confirmAction('確定要記錄未來的帳務嗎？', saveActual);
+          return;
+      }
+
+      // 🛡️ 重複記帳攔截
+      const isDuplicate = data.tx.some(t => t.amount === payload.amount && t.category === payload.category && t.date === payload.date && t.id !== id);
+      if (isDuplicate && !id) {
+          confirmAction('今天已有一筆一模一樣的紀錄，確定要重複記帳嗎？', saveActual);
+          return;
+      }
+
+      saveActual();
+  };
+
   const rootFontSize = settings.uiFontSize === 'sm' ? '14px' : settings.uiFontSize === 'lg' ? '18px' : '16px';
 
   return (
@@ -501,15 +585,35 @@ export default function App() {
       <div className={`min-h-[100dvh] w-full flex justify-center ${t.bg} transition-colors duration-500 overflow-x-hidden font-sans`}>
         <div className={`w-full max-w-md md:max-w-xl ${t.text} relative flex flex-col min-h-[100dvh] ${t.cardInner} md:border-x md:shadow-2xl ${t.border}`}>
           
-          {/* 🔥 刪除確認 Modal */}
+          {/* 🔥 刪除/確認文字鎖 Modal */}
           {ui.confirm && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-              <div className={`${t.cardInner} rounded-3xl p-8 w-full max-w-xs shadow-2xl text-center border ${t.border}`}>
-                <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-5 bg-red-500/10 p-3 rounded-full" />
-                <h3 className={`text-xl font-bold ${t.text} mb-8`}>{ui.confirm.message}</h3>
-                <div className="flex gap-4">
+              <div className={`${t.cardInner} rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center border ${t.border}`}>
+                {ui.confirm.requireText ? <Lock className="w-16 h-16 text-rose-500 mx-auto mb-5 bg-rose-500/10 p-3 rounded-full" /> : <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-5 bg-red-500/10 p-3 rounded-full" />}
+                <h3 className={`text-xl font-bold ${t.text} mb-4`}>{ui.confirm.message}</h3>
+                
+                {ui.confirm.requireText && (
+                  <div className="mb-6 text-left">
+                    <p className={`text-sm ${t.textM} mb-2`}>請輸入 <span className="font-bold text-red-500">{ui.confirm.requireText}</span> 以解鎖執行：</p>
+                    <input 
+                      type="text" 
+                      value={ui.confirm.inputText || ''} 
+                      onChange={e => updateUi({ confirm: { ...ui.confirm, inputText: e.target.value } })}
+                      className={`w-full p-4 rounded-xl border ${t.border} ${t.bg} focus:ring-2 focus:ring-red-500 outline-none font-bold text-center tracking-widest`}
+                      placeholder={ui.confirm.requireText}
+                    />
+                  </div>
+                )}
+                
+                <div className="flex gap-4 mt-6">
                   <button onClick={() => updateUi({confirm: null})} className={`flex-1 py-4 rounded-xl font-bold text-base ${t.textM} ${t.bg} active:scale-95`}>取消</button>
-                  <button onClick={ui.confirm.onConfirm} className="flex-1 py-4 rounded-xl font-bold text-base text-white bg-red-500 shadow-md active:scale-95">刪除</button>
+                  <button 
+                    onClick={ui.confirm.onConfirm} 
+                    disabled={ui.confirm.requireText && ui.confirm.inputText !== ui.confirm.requireText}
+                    className="flex-1 py-4 rounded-xl font-bold text-base text-white bg-red-500 shadow-md active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
+                  >
+                    確認執行
+                  </button>
                 </div>
               </div>
             </div>
@@ -560,10 +664,10 @@ export default function App() {
             {ui.tab === 'home' && (
               <div className="space-y-6 animate-in fade-in">
                 
-                {/* 🌟 帳戶篩選器 */}
+                {/* 🌟 活動帳戶篩選器 */}
                 <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1 shadow-sm`}>
                    <button onClick={() => updateUi({ filterAccount: 'all' })} className={`shrink-0 px-5 py-2.5 font-bold text-sm rounded-xl transition-all ${(!ui.filterAccount || ui.filterAccount === 'all') ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>全部帳戶</button>
-                   {data.accounts.map(a => (
+                   {activeAccounts.map(a => (
                       <button key={a.id} onClick={() => updateUi({ filterAccount: a.id })} className={`shrink-0 px-5 py-2.5 font-bold text-sm rounded-xl transition-all ${ui.filterAccount === a.id ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>{a.name}</button>
                    ))}
                 </div>
@@ -634,7 +738,7 @@ export default function App() {
                   {displayTx.length === 0 ? (
                     <div className={`text-center py-16 font-bold text-lg ${t.textM} ${t.cardInner} rounded-3xl border ${t.border}`}>本月還沒有記帳紀錄</div>
                   ) : displayTx.map(tx => {
-                    const catObj = CATEGORIES.expense.find(c=>c.name===tx.category) || CATEGORIES.income.find(c=>c.name===tx.category);
+                    const catObj = data.categories.expense.find(c=>c.name===tx.category) || data.categories.income.find(c=>c.name===tx.category);
                     const icon = catObj ? catObj.icon : '📝';
                     
                     let displayDateStr = tx.date;
@@ -644,8 +748,9 @@ export default function App() {
                     }
                     
                     return (
-                      <div key={tx.id} className={`p-5 rounded-3xl flex flex-col border ${t.border} ${t.cardInner} shadow-sm group`}>
-                        <div className="flex items-center justify-between">
+                      // 🌟 電腦懸浮/滑動手勢按鈕支援 (透過 group-hover 控制)
+                      <div key={tx.id} className={`p-5 rounded-3xl flex flex-col border ${t.border} ${t.cardInner} shadow-sm group relative overflow-hidden transition-all hover:border-indigo-500/30`}>
+                        <div className="flex items-center justify-between z-10">
                           <div className="flex items-center gap-5 truncate">
                             <div className={`w-16 h-16 rounded-full ${t.bg} flex items-center justify-center text-3xl shrink-0`}>
                               {tx.type === 'transfer' ? <ArrowRightLeft className="w-6 h-6 text-stone-500" /> : icon}
@@ -684,7 +789,8 @@ export default function App() {
                           </div>
                         </div>
                         
-                        <div className={`flex justify-end gap-3 mt-4 pt-4 border-t ${t.border}`}>
+                        {/* 🌟 懸浮編輯/刪除按鈕 (電腦版 Hover 出現，手機版直列) */}
+                        <div className={`flex justify-end gap-3 mt-4 pt-4 border-t ${t.border} md:opacity-0 md:-translate-y-2 md:group-hover:opacity-100 md:group-hover:translate-y-0 transition-all duration-300`}>
                           <button onClick={() => handleOpenTx(tx)} className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold ${t.bg} ${t.textM} hover:${t.primaryText} active:scale-95 transition-colors`}>
                             <Edit3 className="w-4 h-4" /> 修改
                           </button>
@@ -706,22 +812,59 @@ export default function App() {
                   <h2 className="text-3xl font-black">總資產</h2>
                   <span className={`text-4xl font-black ${t.primaryText}`}>${totalAssets.toLocaleString()}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  {data.accounts.map(a => (
-                    <div key={a.id} className={`p-6 rounded-3xl ${t.cardInner} shadow-sm border ${t.border} relative group`}>
-                      <div className="flex items-center gap-3 mb-4">
-                        <span className="text-4xl">{a.icon}</span>
-                        <span className="font-bold text-lg truncate">{a.name}</span>
+                
+                <div className="space-y-4">
+                    <h3 className={`font-bold text-sm ${t.textM} px-2`}>活動帳戶</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {activeAccounts.map(a => (
+                        <div key={a.id} className={`p-6 rounded-3xl ${t.cardInner} shadow-sm border ${t.border} relative group flex flex-col`}>
+                          <div className="flex items-center gap-3 mb-4">
+                            <span className="text-4xl">{a.icon}</span>
+                            <span className="font-bold text-lg truncate">{a.name}</span>
+                          </div>
+                          <div className="text-3xl font-black">${(accBal[a.id] || 0).toLocaleString()}</div>
+                          
+                          <div className="flex justify-end mt-4 pt-4 border-t border-transparent group-hover:border-stone-100 dark:group-hover:border-slate-700 gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                             <button onClick={() => confirmAction('確定要封存此帳戶嗎？封存後記帳不再顯示，但歷史記錄保留。', () => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: true}))} className={`p-2 rounded-full ${t.bg} ${t.textM} hover:text-indigo-500 transition-colors`}>
+                               <Archive className="w-4 h-4"/>
+                             </button>
+                             <button onClick={() => confirmDel('危險操作：確定要刪除帳戶嗎？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} className={`p-2 rounded-full ${t.bg} ${t.textM} hover:text-red-500 transition-colors`}>
+                               <Trash2 className="w-4 h-4"/>
+                             </button>
+                          </div>
+                        </div>
+                      ))}
+                      <div onClick={() => updateUi({ modal: 'account' })} className={`bg-transparent border-2 border-dashed ${t.border} rounded-3xl p-6 flex flex-col items-center justify-center ${t.textM} cursor-pointer min-h-[160px] hover:border-[#D97706] transition-colors active:scale-95`}>
+                        <Plus className="w-10 h-10 mb-2"/>
+                        <span className="text-lg font-bold">新增帳戶</span>
                       </div>
-                      <div className="text-3xl font-black">${(accBal[a.id] || 0).toLocaleString()}</div>
-                      <Trash2 onClick={() => confirmDel('刪除帳戶？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} className={`w-5 h-5 ${t.textM} absolute top-6 right-6 cursor-pointer hover:text-red-500`} />
                     </div>
-                  ))}
-                  <div onClick={() => updateUi({ modal: 'account' })} className={`bg-transparent border-2 border-dashed ${t.border} rounded-3xl p-6 flex flex-col items-center justify-center ${t.textM} cursor-pointer min-h-[160px] hover:border-[#D97706] transition-colors active:scale-95`}>
-                    <Plus className="w-10 h-10 mb-2"/>
-                    <span className="text-lg font-bold">新增帳戶</span>
-                  </div>
                 </div>
+
+                {data.accounts.filter(a => a.isArchived).length > 0 && (
+                   <div className="space-y-4 pt-6">
+                      <h3 className={`font-bold text-sm ${t.textM} px-2 flex items-center gap-2`}><Archive className="w-4 h-4"/>已封存帳戶</h3>
+                      <div className="grid grid-cols-2 gap-4 opacity-70 grayscale">
+                         {data.accounts.filter(a => a.isArchived).map(a => (
+                           <div key={a.id} className={`p-6 rounded-3xl ${t.cardInner} shadow-sm border ${t.border} relative group flex flex-col`}>
+                             <div className="flex items-center gap-3 mb-4">
+                               <span className="text-4xl">{a.icon}</span>
+                               <span className="font-bold text-lg truncate">{a.name}</span>
+                             </div>
+                             <div className="text-3xl font-black">${(accBal[a.id] || 0).toLocaleString()}</div>
+                             <div className="flex justify-end mt-4 pt-4 border-t border-transparent group-hover:border-stone-100 dark:group-hover:border-slate-700 gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                <button onClick={() => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: false})} className={`p-2 rounded-full ${t.bg} ${t.textM} hover:text-emerald-500 transition-colors`} title="解除封存">
+                                  <ArchiveRestore className="w-4 h-4"/>
+                                </button>
+                                <button onClick={() => confirmDel('危險操作：確定要刪除帳戶嗎？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} className={`p-2 rounded-full ${t.bg} ${t.textM} hover:text-red-500 transition-colors`}>
+                                  <Trash2 className="w-4 h-4"/>
+                                </button>
+                             </div>
+                           </div>
+                         ))}
+                      </div>
+                   </div>
+                )}
               </div>
             )}
 
@@ -732,21 +875,34 @@ export default function App() {
                  {/* 🌟 帳戶篩選器 */}
                  <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1 shadow-sm`}>
                     <button onClick={() => updateUi({ filterAccount: 'all' })} className={`shrink-0 px-4 py-2 font-bold text-sm rounded-xl transition-all ${(!ui.filterAccount || ui.filterAccount === 'all') ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>全部帳戶</button>
-                    {data.accounts.map(a => (
+                    {activeAccounts.map(a => (
                        <button key={a.id} onClick={() => updateUi({ filterAccount: a.id })} className={`shrink-0 px-4 py-2 font-bold text-sm rounded-xl transition-all ${ui.filterAccount === a.id ? `${t.cardInner} shadow-sm ${t.primaryText}` : t.textM}`}>{a.name}</button>
                     ))}
                  </div>
 
+                 {/* 🌟 日期模式切換 */}
                  <div className={`flex ${t.cardInner} p-1.5 rounded-xl border ${t.border} shadow-sm`}>
                    <button onClick={() => updateUi({ statsView: 'month' })} className={`flex-1 py-3 rounded-lg text-sm font-bold ${ui.statsView === 'month' ? `${t.bg} ${t.text} shadow-sm` : t.textM}`}>當月分析</button>
                    <button onClick={() => updateUi({ statsView: 'year' })} className={`flex-1 py-3 rounded-lg text-sm font-bold ${ui.statsView === 'year' ? `${t.bg} ${t.text} shadow-sm` : t.textM}`}>年度總結</button>
+                   <button onClick={() => updateUi({ statsView: 'custom' })} className={`flex-1 py-3 rounded-lg text-sm font-bold ${ui.statsView === 'custom' ? `${t.bg} ${t.text} shadow-sm` : t.textM}`}>自訂區間</button>
                  </div>
                  
                  <div className="flex justify-between items-center px-2 pt-2 mb-2">
-                   <button onClick={() => updateUi({ modal: 'date' })} className={`flex items-center gap-1.5 font-bold text-lg ${t.cardInner} px-5 py-2.5 rounded-xl shadow-sm border ${t.border} active:scale-95`}>
-                     {ui.date.getFullYear()}年{ui.date.getMonth() + 1}月 <ChevronDown className="w-5 h-5 ml-1" />
-                   </button>
+                   {ui.statsView === 'custom' ? (
+                      <div className="flex gap-2 w-full">
+                         <input type="date" value={ui.dateRange.start} onChange={e=>updateUi({dateRange:{...ui.dateRange, start: e.target.value}})} className={`flex-1 ${t.cardInner} p-3 rounded-xl border ${t.border} font-bold text-sm`} />
+                         <span className={`self-center ${t.textM} font-bold`}>~</span>
+                         <input type="date" value={ui.dateRange.end} onChange={e=>updateUi({dateRange:{...ui.dateRange, end: e.target.value}})} className={`flex-1 ${t.cardInner} p-3 rounded-xl border ${t.border} font-bold text-sm`} />
+                      </div>
+                   ) : (
+                      <button onClick={() => updateUi({ modal: 'date' })} className={`flex items-center gap-1.5 font-bold text-lg ${t.cardInner} px-5 py-2.5 rounded-xl shadow-sm border ${t.border} active:scale-95`}>
+                        {ui.date.getFullYear()}年{ui.statsView === 'month' ? `${ui.date.getMonth() + 1}月` : '全年度'} <ChevronDown className="w-5 h-5 ml-1" />
+                      </button>
+                   )}
                  </div>
+
+                 {/* 🌟 趨勢折線圖 (僅年度顯示) */}
+                 {ui.statsView === 'year' && <LineChart data={yearTrendData} t={t} />}
 
                  {/* 🌟 收支動態切換按鈕 */}
                  <div className={`flex ${t.cardInner} p-1.5 rounded-xl border ${t.border} shadow-sm mb-4`}>
@@ -756,7 +912,7 @@ export default function App() {
 
                  {/* 🌟 雙同心圓環儀表板 */}
                  <div className={`${t.cardInner} rounded-[2.5rem] p-8 border ${t.border} shadow-sm flex flex-col items-center relative overflow-hidden`}>
-                  
+                 
                   {/* 背景裝飾光暈 */}
                   <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full blur-[60px] opacity-20 pointer-events-none transition-colors duration-1000 ${ui.chartView === 'expense' ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
 
@@ -798,8 +954,8 @@ export default function App() {
                 </div>
 
                 <div className={`${t.cardInner} rounded-[2.5rem] p-7 border ${t.border} shadow-sm`}>
-                  <h3 className="font-extrabold text-lg mb-6 flex items-center gap-2"><ArrowRightLeft className="w-6 h-6"/> {ui.statsView === 'month' ? '本月' : '年度'}代墊結算</h3>
-                  <p className={`text-xs ${t.textM} font-bold mb-5 -mt-4 bg-black/5 p-2 rounded-lg`}>💡 結算為「全部帳戶」之整體資料，不受上方篩選影響</p>
+                  <h3 className="font-extrabold text-lg mb-6 flex items-center gap-2"><ArrowRightLeft className="w-6 h-6"/> {ui.statsView === 'month' ? '本月' : ui.statsView === 'year' ? '年度' : '區間'}代墊結算</h3>
+                  <p className={`text-xs ${t.textM} font-bold mb-5 -mt-4 bg-black/5 p-2 rounded-lg`}>💡 結算為當前區間內之整體資料</p>
                   {settlement.status === 'settled' ? (
                     <div className={`p-5 text-center font-bold text-emerald-500 bg-emerald-500/10 rounded-2xl text-base flex items-center justify-center gap-2`}>🎉 帳目完全算清！</div>
                   ) : (
@@ -1057,7 +1213,8 @@ export default function App() {
                     {ui.modal === 'settings' && <Settings className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'barcode' && <Barcode className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'notify' && <Bell className={`w-6 h-6 ${t.textM}`}/>}
-                    {ui.modal === 'tx' ? (ui.selectedTx ? '修改紀錄' : '新增紀錄') : ui.modal === 'settings' ? '設定與管理' : ui.modal === 'barcode' ? '發票載具' : ui.modal === 'notify' ? '推播與通知' : '選單'}
+                    {ui.modal === 'categories' && <List className={`w-6 h-6 ${t.textM}`}/>}
+                    {ui.modal === 'tx' ? (ui.selectedTx ? '修改紀錄' : '新增紀錄') : ui.modal === 'settings' ? '設定與管理' : ui.modal === 'barcode' ? '發票載具' : ui.modal === 'notify' ? '推播與通知' : ui.modal === 'categories' ? '自訂分類管理' : '選單'}
                   </h3>
                   <button onClick={() => updateUi({ modal: null, selectedTx: null })} className={`p-2.5 ${t.bg} rounded-full active:scale-95`}>
                     <X className={`w-6 h-6 ${t.textM}`}/>
@@ -1067,41 +1224,24 @@ export default function App() {
                 <div className="flex-1 overflow-y-auto hide-scrollbar pb-safe">
                   {ui.modal === 'tx' && (
                     <TxForm 
-                      accounts={data.accounts} cats={CATEGORIES} tags={data.tags} initialData={ui.selectedTx} 
+                      accounts={activeAccounts} cats={data.categories} tags={data.tags} initialData={ui.selectedTx} 
                       templates={data.templates} settings={settings}
                       onAI={() => updateUi({ modal: 'ai' })} onAddTag={handleAddGlobalTag}
                       onSaveTemplate={(tpl) => doAction(() => addDoc(getCol('shared_templates'), {...tpl, createdAt: serverTimestamp()}), '範本已儲存')}
-                      onDeleteTemplate={(id) => doAction(() => deleteDoc(getDocRef('shared_templates', id)), '範本已移除')}
-                      onSave={(txData) => { 
-                        const { id, recordDate, recordTime, ...payload } = txData;
-                        payload.updatedAt = serverTimestamp();
-                        payload.date = recordDate || getLocalYYYYMMDD(ui.date);
-                        payload.month = payload.date.substring(0, 7);
-                        payload.recordTime = recordTime || getLocalHHmm(new Date());
-                        Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
-                        if(id) doAction(() => updateDoc(getDocRef('shared_ledger', id), payload), '修改成功'); 
-                        else { payload.createdAt = serverTimestamp(); payload.createdBy = user ? user.uid : 'unknown'; doAction(() => addDoc(getCol('shared_ledger'), payload), '記帳成功'); }
-                      }} 
+                      onDeleteTemplate={(id) => confirmDel('確定要刪除範本嗎？', () => deleteDoc(getDocRef('shared_templates', id)))}
+                      onSave={handleTxSave} 
                       t={t} ui={ui}
                     />
                   )}
                   {ui.modal === 'ai' && (
                     <AIForm 
-                      cats={CATEGORIES} accounts={data.accounts} onBack={() => updateUi({ modal: 'tx' })} 
-                      onSave={(txData) => {
-                        const { recordDate, recordTime, ...payload } = txData;
-                        payload.date = recordDate || getLocalYYYYMMDD(ui.date);
-                        payload.month = payload.date.substring(0, 7);
-                        payload.recordTime = recordTime || getLocalHHmm(new Date());
-                        payload.createdAt = serverTimestamp();
-                        payload.createdBy = user ? user.uid : 'unknown';
-                        doAction(() => addDoc(getCol('shared_ledger'), payload), 'AI 記帳成功');
-                      }} 
+                      cats={data.categories} accounts={activeAccounts} onBack={() => updateUi({ modal: 'tx' })} 
+                      onSave={handleTxSave} 
                       showToast={showToast} t={t} ui={ui} 
                     />
                   )}
                   {ui.modal === 'date' && (
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-3 pb-8">
                       {Array.from({length:12}).map((_,i) => (
                         <button key={i} onClick={() => { updateUi({ date: new Date(ui.date.getFullYear(), i, 1), modal: null }); }} className={`py-5 rounded-2xl font-bold border text-lg active:scale-95 transition-all ${ui.date.getMonth()===i ? `${t.primary} text-white border-transparent shadow-md` : `${t.bg} ${t.border}`}`}>
                           {i+1}月
@@ -1110,11 +1250,24 @@ export default function App() {
                     </div>
                   )}
                   {ui.modal === 'settings' && (
-                    <SettingsForm settings={settings} onSave={(s) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), s, {merge:true}), '設定已儲存')} onExport={handleExportToSheets} onRecurring={() => updateUi({ modal: 'recurring' })} t={t} />
+                    <SettingsForm 
+                      settings={settings} onSave={(s) => doAction(() => setDoc(getDocRef('shared_settings', 'main'), s, {merge:true}), '設定已儲存')} 
+                      onExport={handleExportToSheets} 
+                      onRecurring={() => updateUi({ modal: 'recurring' })} 
+                      onCategories={() => updateUi({ modal: 'categories' })}
+                      t={t} 
+                    />
+                  )}
+                  {ui.modal === 'categories' && (
+                    <CategoryForm 
+                       categories={data.categories} 
+                       onSave={cats => doAction(() => setDoc(getDocRef('shared_settings', 'categories'), cats), '分類已儲存')} 
+                       t={t} 
+                    />
                   )}
                   {ui.modal === 'recurring' && (
                     <RecurringForm 
-                      rules={data.recurringRules} accounts={data.accounts} cats={CATEGORIES} 
+                      rules={data.recurringRules} accounts={activeAccounts} cats={data.categories} 
                       onSave={r => doAction(() => addDoc(getCol('recurring_rules'), r), '自動記帳規則已建立')} 
                       onDelete={id => confirmDel('刪除此規則？', () => deleteDoc(getDocRef('recurring_rules', id)))} 
                       t={t} 
@@ -1150,7 +1303,7 @@ export default function App() {
                     </div>
                   )}
                   {ui.modal === 'account' && (
-                    <AccForm onSave={d => doAction(() => addDoc(getCol('shared_accounts'), {...d, createdAt: serverTimestamp()}), '帳戶建立')} t={t} />
+                    <AccForm onSave={d => doAction(() => addDoc(getCol('shared_accounts'), {...d, createdAt: serverTimestamp(), isArchived: false}), '帳戶建立')} t={t} />
                   )}
                   {ui.modal === 'bill' && (
                     <BillForm onSave={d => doAction(() => addDoc(getCol('shared_bills'), {...d, isPaid: false, createdAt: serverTimestamp()}), '帳單建立')} t={t} />
@@ -1179,7 +1332,7 @@ export default function App() {
                     <FundForm goal={ui.selectedItem} onSave={amt => doAction(() => updateDoc(getDocRef('shared_goals', ui.selectedItem.id), {currentAmount: ui.selectedItem.currentAmount + amt}), '存入成功')} t={t} />
                   )}
                   {ui.modal === 'tags' && (
-                    <div className="space-y-5">
+                    <div className="space-y-5 pb-8">
                       <div className="flex flex-wrap gap-2">
                         {data.tags.map(tag => (
                           <button key={tag} onClick={() => updateUi({filterTags: ui.filterTags.includes(tag) ? ui.filterTags.filter(x=>x!==tag) : [...ui.filterTags,tag]})} className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 ${ui.filterTags.includes(tag) ? `${t.primary} text-white border-transparent shadow-sm` : `${t.bg} ${t.border}`}`}>
@@ -1714,7 +1867,7 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
 
   return (
     <div className="space-y-4 flex flex-col h-full">
-      <button onClick={onBack} className={`text-sm font-bold ${t.textM} mb-2 flex items-center gap-1.5 shrink-0`}><ChevronLeft className="w-4 h-4"/> 返回手動記帳</button>
+      <button onClick={onBack} className={`text-sm font-bold ${t.textM} mb-2 flex items-center gap-1.5 shrink-0`}><ChevronLeft className="w-4 h-4"/> 返回手借</button>
       <div className="relative flex-1">
         <textarea 
           value={text} 
@@ -1741,9 +1894,80 @@ const AIForm = ({ cats, accounts, onBack, onSave, showToast, t, ui }) => {
 };
 
 // ==========================================
+// 🌟 自訂分類管理表單 CategoryForm
+// ==========================================
+const CategoryForm = ({ categories, onSave, t }) => {
+  const [cats, setCats] = useState({ 
+     expense: [...categories.expense], 
+     income: [...categories.income] 
+  });
+  const [tab, setTab] = useState('expense');
+  const [newName, setNewName] = useState('');
+  const [newIcon, setNewIcon] = useState('✨');
+  
+  const handleAdd = () => {
+    if (!newName.trim() || cats[tab].find(c => c.name === newName.trim())) return alert("分類名稱不能重複或空白！");
+    const newCategory = { name: newName.trim(), icon: newIcon, color: '#A3B18A' };
+    setCats(prev => ({ ...prev, [tab]: [...prev[tab], newCategory] }));
+    setNewName('');
+  };
+
+  const handleRemove = (name) => {
+    setCats(prev => ({ ...prev, [tab]: prev[tab].filter(c => c.name !== name) }));
+  };
+
+  return (
+    <div className="space-y-6 flex flex-col h-full pb-8">
+       <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg}`}>
+         <button onClick={() => setTab('expense')} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${tab === 'expense' ? `${t.cardInner} shadow-sm ${t.text}` : t.textM}`}>支出分類</button>
+         <button onClick={() => setTab('income')} className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all ${tab === 'income' ? `${t.cardInner} shadow-sm ${t.text}` : t.textM}`}>收入分類</button>
+       </div>
+       
+       <div className={`p-5 rounded-3xl border ${t.border} ${t.bg} space-y-4`}>
+         <label className={`font-bold text-sm ${t.textM} px-1`}>新增分類</label>
+         <div className="flex gap-2">
+            <input 
+               value={newIcon} 
+               onChange={e => setNewIcon(e.target.value)} 
+               maxLength={2}
+               className={`w-16 p-4 rounded-xl font-bold text-center text-xl ${t.cardInner} border ${t.border} outline-none focus:ring-2 ${t.ring}`} 
+            />
+            <input 
+               value={newName} 
+               onChange={e => setNewName(e.target.value)} 
+               placeholder="分類名稱"
+               className={`flex-1 p-4 rounded-xl font-bold text-base ${t.cardInner} border ${t.border} outline-none focus:ring-2 ${t.ring}`} 
+            />
+            <button onClick={handleAdd} disabled={!newName} className={`px-5 rounded-xl font-bold text-white shadow-md disabled:opacity-50 ${t.primary}`}><Plus className="w-5 h-5"/></button>
+         </div>
+       </div>
+
+       <div className="flex-1 overflow-y-auto hide-scrollbar">
+         <div className="grid grid-cols-2 gap-3">
+           {cats[tab].map(c => (
+             <div key={c.name} className={`flex items-center justify-between p-4 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm`}>
+                <div className="flex items-center gap-3">
+                   <span className="text-2xl">{c.icon}</span>
+                   <span className="font-bold text-sm">{c.name}</span>
+                </div>
+                <Trash2 onClick={() => handleRemove(c.name)} className="w-4 h-4 text-stone-400 hover:text-red-500 cursor-pointer transition-colors" />
+             </div>
+           ))}
+         </div>
+       </div>
+
+       <button onClick={() => onSave(cats)} className={`w-full py-5 rounded-full font-bold text-lg text-white shadow-lg mt-auto active:scale-95 ${t.primary}`}>
+          儲存分類設定
+       </button>
+    </div>
+  );
+};
+
+
+// ==========================================
 // 高質感設定表單 (旗艦升級：多幣別陣列管理)
 // ==========================================
-const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
+const SettingsForm = ({ settings, onSave, onExport, onRecurring, onCategories, t }) => {
   const [s, setS] = useState(settings);
   const [newCurr, setNewCurr] = useState('');
   const isDark = t.bg.includes('0F172A') || t.bg.includes('1E1B18') || t.bg.includes('001f3f'); 
@@ -1914,8 +2138,16 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
       </div>
 
       <button 
-        onClick={onRecurring} 
+        onClick={onCategories} 
         className={`w-full py-4 rounded-full border ${t.border} ${t.bg} font-bold text-sm flex justify-between items-center px-6 ${t.text} shadow-sm active:scale-95`}
+      >
+        <div className="flex items-center gap-2"><List className={`w-5 h-5 ${t.textM}`} /> 自訂記帳分類</div>
+        <ChevronRight className={`w-5 h-5 ${t.textM}`} />
+      </button>
+
+      <button 
+        onClick={onRecurring} 
+        className={`w-full py-4 rounded-full border ${t.border} ${t.bg} font-bold text-sm flex justify-between items-center px-6 ${t.text} shadow-sm active:scale-95 mt-2`}
       >
         <div className="flex items-center gap-2"><Repeat className={`w-5 h-5 ${t.textM}`} /> 設定週期性自動記帳</div>
         <ChevronRight className={`w-5 h-5 ${t.textM}`} />
@@ -1923,7 +2155,7 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
 
       <button 
         onClick={() => onSave(s)} 
-        className={`w-full py-5 rounded-full font-bold text-lg text-white mt-2 shadow-lg ${t.primary} active:scale-95`}
+        className={`w-full py-5 rounded-full font-bold text-lg text-white mt-4 shadow-lg ${t.primary} active:scale-95`}
       >
         儲存設定
       </button>
