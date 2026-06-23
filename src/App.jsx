@@ -7,11 +7,9 @@ import {
   AlertTriangle, ChevronDown, Moon, Sun, Filter, Bell, Archive, Calendar, TrendingUp, TrendingDown, Globe
 } from 'lucide-react';
 
-// Firebase 核心模組
 import { signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 
-// 📦 引入我們剛剛拆分出去的小盒子
 import { auth, db, APP_ID, apiKey } from './firebase';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './utils/constants';
 import { getLocalYYYYMM, getLocalYYYYMMDD, getLocalHHmm, calculateDaysDiff, fetchWithBackoff } from './utils/helpers';
@@ -21,7 +19,6 @@ import {
   NoteForm, EventForm, GoalForm, FundForm 
 } from './components/Modals';
 
-// 簡化資料庫路徑的工具函數
 const getCol = (colName) => collection(db, 'artifacts', APP_ID, 'public', 'data', String(colName)); 
 const getDocRef = (colName, docId) => doc(db, 'artifacts', APP_ID, 'public', 'data', String(colName), String(docId)); 
 
@@ -44,8 +41,7 @@ export default function App() {
     monthlyBudget: 50000, husbandBarcode: '', wifeBarcode: '', husbandCert: '', wifeCert: '',
     enableRollover: true, autoSyncInvoices: true, notifyLargeExpense: true, largeExpenseThreshold: 3000, 
     notifyBillDue: true, notifyEvents: true, notifyAdvanceDays: 3,
-    travelMode: false, travelCurrencies: [],
-    uiFontSize: 'md' 
+    travelMode: false, travelCurrencies: [], uiFontSize: 'md' 
   });
   
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
@@ -57,16 +53,13 @@ export default function App() {
   const updateUi = (updates) => {
     setUi(prev => {
       const next = { ...prev, ...updates };
-      if (updates.hasOwnProperty('isDark')) {
-        localStorage.setItem('homeLedgerTheme', updates.isDark ? 'dark' : 'light');
-      }
+      if (updates.hasOwnProperty('isDark')) localStorage.setItem('homeLedgerTheme', updates.isDark ? 'dark' : 'light');
       return next;
     });
   };
   
   const showToast = (msg, type = 'success') => { 
-    updateUi({ toast: { msg, type } }); 
-    setTimeout(() => updateUi({ toast: null }), 4000); 
+    updateUi({ toast: { msg, type } }); setTimeout(() => updateUi({ toast: null }), 4000); 
   };
 
   useEffect(() => {
@@ -79,13 +72,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (err) {
-        showToast("登入失敗，請檢查網路", "error");
-      }
-    };
+    const initAuth = async () => { try { await signInAnonymously(auth); } catch (err) { showToast("登入失敗", "error"); } };
     initAuth();
     return onAuthStateChanged(auth, setUser);
   }, []);
@@ -132,7 +119,6 @@ export default function App() {
     return () => unsubs.forEach(u => u());
   }, [user]);
 
-  // 週期性記帳引擎
   useEffect(() => {
     if (!user || data.recurringRules.length === 0 || processedRecurring.current) return;
     const processRules = async () => {
@@ -164,7 +150,7 @@ export default function App() {
   
   const activeTxs = useMemo(() => {
     if (ui.dateFilterMode === 'month') return data.tx.filter(t => t.month === cMonth);
-    if (ui.dateFilterMode === 'year') return data.tx.filter(t => t.date.startsWith(cYear));
+    if (ui.dateFilterMode === 'year') return data.tx.filter(t => t.date?.startsWith(cYear));
     if (ui.dateFilterMode === 'custom') {
       const start = getLocalYYYYMMDD(ui.date); const end = getLocalYYYYMMDD(ui.endDate);
       return data.tx.filter(t => t.date >= start && t.date <= end);
@@ -185,8 +171,9 @@ export default function App() {
 
   const calcStats = (txs) => txs.reduce((s, t) => {
     if (t.type === 'transfer') return s;
-    if (t.type === 'expense') { s.exp += t.amount; s.expCat[t.category] = (s.expCat[t.category] || 0) + t.amount; } 
-    else if (t.type === 'income') { s.inc += t.amount; s.incCat[t.category] = (s.incCat[t.category] || 0) + t.amount; }
+    const amount = Number(t.amount) || 0; 
+    if (t.type === 'expense') { s.exp += amount; s.expCat[t.category] = (s.expCat[t.category] || 0) + amount; } 
+    else if (t.type === 'income') { s.inc += amount; s.incCat[t.category] = (s.incCat[t.category] || 0) + amount; }
     return s;
   }, { exp: 0, inc: 0, expCat: {}, incCat: {} });
 
@@ -202,37 +189,47 @@ export default function App() {
 
     return Object.entries(targetCat).map(([name, value]) => {
       const catObj = catList.find(c => c.name === name);
-      return { name, value, percentage: Math.round((value / total) * 100), color: catObj?.color || '#a8a29e', icon: catObj?.icon || '✨' };
+      return { name, value, percentage: Math.round((value / total) * 100), color: catObj?.color || '#9CA3AF', icon: catObj?.icon || '✨' };
     }).sort((a, b) => b.value - a.value);
   }, [tStats, ui.chartView]);
 
   const rollover = useMemo(() => {
     if (!settings.enableRollover) return { enabled: false, amt: 0, budget: settings.monthlyBudget };
     const pMonth = getLocalYYYYMM(new Date(ui.date.getFullYear(), ui.date.getMonth() - 1, 1));
-    const pExp = data.tx.filter(t => t.month === pMonth && t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const pExp = data.tx.filter(t => t.month === pMonth && t.type === 'expense').reduce((sum, t) => sum + (Number(t.amount)||0), 0);
     const amt = (pExp < settings.monthlyBudget && pExp > 0) ? settings.monthlyBudget - pExp : 0;
     return { enabled: true, amt, budget: settings.monthlyBudget + amt };
   }, [settings, ui.date, data.tx]);
 
   const accBal = data.accounts.reduce((acc, a) => {
     const balance = data.tx.reduce((sum, t) => {
-      if (t.type === 'transfer') { if (t.fromAccountId === a.id) return sum - t.amount; if (t.toAccountId === a.id) return sum + t.amount; } 
-      else if (t.accountId === a.id) return t.type === 'expense' ? sum - t.amount : sum + t.amount;
+      const amt = Number(t.amount) || 0;
+      if (t.type === 'transfer') { if (t.fromAccountId === a.id) return sum - amt; if (t.toAccountId === a.id) return sum + amt; } 
+      else if (t.accountId === a.id) return t.type === 'expense' ? sum - amt : sum + amt;
       return sum;
-    }, a.balance || 0);
+    }, Number(a.balance) || 0);
     return { ...acc, [a.id]: balance };
   }, {});
   
   const totalAssets = Object.values(accBal).reduce((s, b) => s + b, 0);
 
+  // 🌟 恢復：最精準的代墊結算，完美讀懂舊資料的 splitRatio 結構
   const settlement = useMemo(() => {
     let hOwesW = 0; let wOwesH = 0; 
     activeTxs.forEach(t => {
       if (t.type !== 'expense' || t.split === 'none') return; 
+      
       let ratioH = 0.5; let ratioW = 0.5;
-      if (t.split === 'custom' && t.splitRatio) { ratioH = t.splitRatio.h / 100; ratioW = t.splitRatio.w / 100; }
-      if (t.payer === 'husband') wOwesH += (t.amount * ratioW); else if (t.payer === 'wife') hOwesW += (t.amount * ratioH);
+      if (t.split === 'custom' && t.splitRatio) { 
+        ratioH = Number(t.splitRatio.h) / 100; 
+        ratioW = Number(t.splitRatio.w) / 100; 
+      }
+      
+      const amt = Number(t.amount) || 0;
+      if (t.payer === 'husband') wOwesH += (amt * ratioW); 
+      else if (t.payer === 'wife') hOwesW += (amt * ratioH);
     });
+    
     const netWifeOwesHusband = wOwesH - hOwesW;
     if (netWifeOwesHusband > 0.01) return { status: 'unsettled', who: 'wife', to: 'husband', amt: netWifeOwesHusband };
     if (netWifeOwesHusband < -0.01) return { status: 'unsettled', who: 'husband', to: 'wife', amt: Math.abs(netWifeOwesHusband) };
@@ -243,13 +240,12 @@ export default function App() {
     const a = []; const today = new Date().getDate(); const notifyDays = settings.notifyAdvanceDays || 3;
     if (settings.notifyBillDue) data.bills.forEach(b => { if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) a.push({ id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期` }); });
     if (settings.notifyEvents) data.events.forEach(e => { const d = calculateDaysDiff(e.date); if (d >= 0 && d <= notifyDays) a.push({ id: `e_${e.id}`, icon: e.icon || '🎉', title: '紀念日提醒', desc: `${e.title} 還有 ${d} 天` }); });
-    if (settings.notifyLargeExpense) data.tx.filter(t => t.month === cMonth).slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${t.amount.toLocaleString()}` }); });
+    if (settings.notifyLargeExpense) data.tx.filter(t => t.month === cMonth).slice(0, 15).forEach(t => { if (t.type === 'expense' && t.amount >= (settings.largeExpenseThreshold || 3000)) a.push({ id: `t_${t.id}`, icon: '💸', title: '大額消費防護', desc: `${t.payer === 'husband' ? '老公' : t.payer === 'wife' ? '老婆' : '共同'} 記了一筆 $${Number(t.amount).toLocaleString()}` }); });
     return a;
   }, [data, settings, cMonth]);
 
   const activeAlerts = rawAlerts.filter(a => !dismissedAlerts.includes(a.id));
 
-  // 🛡️ 危險操作帶文字確認防呆
   const confirmAction = (msg, action, requireText = null) => {
     updateUi({ confirm: { message: msg, requireText, onConfirm: async () => {
       try { await action(); showToast("操作已成功執行"); } 
@@ -267,7 +263,6 @@ export default function App() {
     try { await updateDoc(getDocRef('shared_accounts', accId), { archived: !isArchived }); showToast(isArchived ? "帳戶已解封" : "帳戶已封存，歷史明細將被保留"); } catch (e) {}
   };
 
-  // 🤖 AI 顧問呼叫
   const handleCallAI = async () => {
     if (!apiKey) { showToast("系統未設定 API 金鑰！", "error"); return; }
     setIsAiLoading(true); setAiAnalysis('');
@@ -285,7 +280,6 @@ export default function App() {
     } catch (err) { setAiAnalysis(`AI 服務連線異常：${err.message}`); } finally { setIsAiLoading(false); }
   };
 
-  // 匯出 CSV 
   const handleExportToSheets = () => {
     if (data.tx.length === 0) return showToast("目前沒有資料可以匯出喔！", "error"); 
     const BOM = "\uFEFF"; 
@@ -295,7 +289,14 @@ export default function App() {
       const catOrFrom = tx.type === 'transfer' ? data.accounts.find(a => a.id === tx.fromAccountId)?.name : tx.category;
       const accOrTo = tx.type === 'transfer' ? data.accounts.find(a => a.id === tx.toAccountId)?.name : data.accounts.find(a => a.id === tx.accountId)?.name;
       const payerLabel = tx.payer === 'husband' ? '老公' : tx.payer === 'wife' ? '老婆' : '共同';
-      const splitLabel = tx.type === 'expense' ? (tx.split === 'none' ? '不平分' : (tx.split === 'custom' ? `男${tx.splitRatio?.h}女${tx.splitRatio?.w}` : '平分')) : '-';
+      
+      let splitLabel = '-';
+      if (tx.type === 'expense') {
+         if (tx.split === 'none') splitLabel = '不平分';
+         else if (tx.split === 'custom' && tx.splitRatio) splitLabel = `男${tx.splitRatio.h}女${tx.splitRatio.w}`;
+         else splitLabel = '平分'; // 防呆：相容舊的 'half'
+      }
+
       return [tx.date, tx.recordTime || '', typeLabel, catOrFrom || '', accOrTo || '', tx.amount, `"${tx.note || ''}"`, payerLabel, splitLabel, tx.tags ? `"${tx.tags.join(';')}"` : ''].join(",");
     });
     const csvContent = BOM + headers.join(",") + "\n" + rows.join("\n");
@@ -327,6 +328,8 @@ export default function App() {
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         body { background-color: ${t.bg.replace('bg-[', '').replace(']', '')}; margin: 0; padding: 0; transition: background-color 0.5s ease; }
         .donut-ring { stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: 2px solid #6366F1; margin-top: -8px; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 8px; cursor: pointer; background: #334155; border-radius: 4px; }
       `}} />
 
       <div className={`min-h-[100dvh] w-full flex justify-center ${t.bg} transition-colors duration-500 overflow-x-hidden font-sans`}>
@@ -382,6 +385,7 @@ export default function App() {
             {/* ================= 首頁 Tab ================= */}
             {ui.tab === 'home' && (
               <div className="space-y-6 animate-in fade-in duration-300">
+                
                 <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.cardInner} overflow-x-auto hide-scrollbar gap-1 shadow-sm`}>
                    <button onClick={() => updateUi({ filterAccount: 'all' })} className={`shrink-0 px-6 py-2.5 font-bold text-sm rounded-xl transition-all ${(!ui.filterAccount || ui.filterAccount === 'all') ? `${t.bg} shadow-sm ${t.text}` : t.textM}`}>全部帳戶</button>
                    {activeAccounts.map(a => (
@@ -429,7 +433,7 @@ export default function App() {
                     <input type="text" value={ui.search} onChange={e => updateUi({ search: e.target.value })} placeholder="搜尋明細、備註..." className={`w-full ${t.cardInner} font-bold py-4 pl-12 pr-4 text-sm rounded-2xl border ${t.border} focus:outline-none focus:ring-2 ${t.ring} shadow-sm`} />
                   </div>
                   <button onClick={() => updateUi({ modal: 'tags' })} className={`p-4 rounded-2xl border shadow-sm transition-all ${ui.filterTags.length > 0 ? `${t.primary} text-white border-transparent` : `${t.cardInner} ${t.textM} ${t.border}`} active:scale-95 relative`}>
-                    <Filter className="w-5 h-5" />{ui.filterTags.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-white rounded-full"></span>}
+                    <Filter className="w-5 h-5" />{ui.filterTags.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center text-[10px] text-white">{ui.filterTags.length}</span>}
                   </button>
                 </div>
 
@@ -446,6 +450,14 @@ export default function App() {
                     const icon = catObj ? catObj.icon : '📝';
                     let displayDateStr = tx.date; if (tx.date && tx.date.includes('-')) { const [y, m, d] = tx.date.split('-'); displayDateStr = `${d}/${m}/${y}`; }
                     
+                    // 🌟 恢復：安全的渲染 Split 文字，支援所有舊版資料
+                    let splitText = '';
+                    if (tx.type === 'expense') {
+                      if (tx.split === 'none') splitText = '不平分';
+                      else if (tx.split === 'custom' && tx.splitRatio) splitText = `男${tx.splitRatio.h}女${tx.splitRatio.w}`;
+                      else splitText = '平分';
+                    }
+
                     return (
                       <SwipeableItem key={tx.id} t={t} onEdit={() => updateUi({ modal: 'tx', selectedTx: tx })} onDelete={() => confirmAction('確定刪除此紀錄？', () => deleteDoc(getDocRef('shared_ledger', tx.id)))}>
                         <div className={`p-5 flex flex-col`}>
@@ -455,13 +467,13 @@ export default function App() {
                               <div className="truncate">
                                 <p className="font-extrabold text-lg truncate mb-1">
                                   {tx.type === 'transfer' ? '轉帳' : tx.category} 
-                                  <span className={`text-xs ${t.textM} ml-2 font-bold opacity-80`}>{tx.type === 'transfer' ? `${data.accounts.find(a=>a.id===tx.fromAccountId)?.name} ➔ ${data.accounts.find(a=>a.id===tx.toAccountId)?.name}` : `(${data.accounts.find(a=>a.id===tx.accountId)?.name})`}</span>
+                                  <span className={`text-xs ${t.textM} ml-2 font-bold opacity-80`}>{tx.type === 'transfer' ? `${data.accounts.find(a=>a.id===tx.fromAccountId)?.name || '未知'} ➔ ${data.accounts.find(a=>a.id===tx.toAccountId)?.name || '未知'}` : `(${data.accounts.find(a=>a.id===tx.accountId)?.name || '未知'})`}</span>
                                 </p>
                                 <div className="flex gap-1.5 mt-1.5 flex-wrap items-center">
                                 {tx.type !== 'transfer' && (
                                   <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold shadow-sm ${tx.type === 'expense' ? 'bg-stone-100 text-stone-600' : 'bg-emerald-100 text-emerald-700'}`}>
                                     {tx.type === 'expense' ? '付:' : '收:'}{tx.payer==='husband' ? '老公' : tx.payer==='wife' ? '老婆' : '共同'}
-                                    {tx.type === 'expense' ? (tx.split === 'none' ? ' (不平分)' : (tx.split === 'custom' && tx.splitRatio ? ` (男${tx.splitRatio.h} 女${tx.splitRatio.w})` : ' (平分)')) : ''}
+                                    {tx.type === 'expense' ? ` (${splitText})` : ''}
                                   </span>
                                 )}
                                 <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${t.bg} ${t.textM} shadow-sm`}>{displayDateStr} {tx.recordTime || ''}</span>
@@ -471,7 +483,7 @@ export default function App() {
                               </div>
                             </div>
                             <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
-                              <span className={`font-black text-xl ${tx.type === 'expense' ? t.text : tx.type === 'income' ? 'text-emerald-500' : t.textM}`}>{tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}${tx.amount.toLocaleString()}</span>
+                              <span className={`font-black text-xl ${tx.type === 'expense' ? t.text : tx.type === 'income' ? 'text-emerald-500' : t.textM}`}>{tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}${(Number(tx.amount)||0).toLocaleString()}</span>
                               {tx.hasPhoto && <ImageIcon className={`w-3.5 h-3.5 ${t.textM}`} />}
                             </div>
                           </div>
