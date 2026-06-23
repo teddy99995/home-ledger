@@ -17,6 +17,7 @@ export const ToggleSwitch = ({ checked, onChange, isDark }) => (
   </div>
 );
 
+// ✅ 支援滑動手勢的列表組件
 export const SwipeableItem = ({ children, onEdit, onDelete, t }) => {
   const scrollRef = useRef(null);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollLeft = 80; }, []);
@@ -37,6 +38,7 @@ export const SwipeableItem = ({ children, onEdit, onDelete, t }) => {
   );
 };
 
+// ✅ 年度趨勢折線圖
 export const TrendLineChart = ({ data, year, t, isDark }) => {
   const months = Array.from({length: 12}, (_, i) => i);
   const monthlyData = months.map(m => {
@@ -80,7 +82,7 @@ export const TrendLineChart = ({ data, year, t, isDark }) => {
 };
 
 // ==========================================
-// 2. 記帳相關 Modals
+// 2. 記帳相關 Modals (包含可收合計算機)
 // ==========================================
 export const TxForm = ({ accounts, cats, tags, initialData, templates, settings, allTxs, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onClose, onSave, t, ui }) => {
   const [data, setData] = useState({ 
@@ -130,7 +132,7 @@ export const TxForm = ({ accounts, cats, tags, initialData, templates, settings,
     let finalAmount = Number(evaluateMath(data.amount));
     if (settings.travelMode && currency !== 'TWD' && finalAmount > 0) { const c = safeTravelCurrencies.find(x => x.code === currency); if (c) { finalAmount = Math.round(finalAmount * c.rate); data.note = `[${c.code} ${data.amount}] ${data.note}`; } }
     if (finalAmount > 0) {
-      if (finalAmount > (settings.largeExpenseThreshold || 50000)) { if(!window.confirm(`⚠️ 警告：金額高達 $${finalAmount.toLocaleString()}，請確認是否輸入正確？`)) return; }
+      if (settings.notifyLargeExpense && finalAmount > (settings.largeExpenseThreshold || 50000)) { if(!window.confirm(`⚠️ 警告：金額高達 $${finalAmount.toLocaleString()}，請確認是否輸入正確？`)) return; }
       const selectedD = new Date(data.recordDate); const diffDays = (selectedD - new Date()) / 86400000;
       if (diffDays > 7) { if(!window.confirm(`⚠️ 提示：您選擇了未來的日期 (${data.recordDate})，確定要記帳嗎？`)) return; }
       if (!initialData) {
@@ -156,9 +158,7 @@ export const TxForm = ({ accounts, cats, tags, initialData, templates, settings,
     }
   };
 
-  const handlePhotoUpload = (e) => {
-    setIsOCR(true); setTimeout(() => setIsOCR(false), 1500); 
-  };
+  const handlePhotoUpload = (e) => { setIsOCR(true); setTimeout(() => setIsOCR(false), 1500); };
 
   return (
     <div className="flex flex-col h-full bg-transparent">
@@ -263,6 +263,7 @@ export const TxForm = ({ accounts, cats, tags, initialData, templates, settings,
   );
 };
 
+// ✅ 全新升級：對話式 AI 介面
 export const AIChatForm = ({ cats, accounts, onBack, onSave, showToast, t, ui, apiKey }) => {
   const [messages, setMessages] = useState([{ id: '1', role: 'ai', text: '哈囉！我是您的專屬理財管家。您可以跟我說：「今天去全聯買菜花了 500 元，老婆付的」，我會自動幫您解析喔！' }]);
   const [inputText, setInputText] = useState(''); const [loading, setLoading] = useState(false); const scrollRef = useRef(null);
@@ -311,9 +312,6 @@ export const AIChatForm = ({ cats, accounts, onBack, onSave, showToast, t, ui, a
   );
 };
 
-// ==========================================
-// 3. 設定與其他 Modals
-// ==========================================
 export const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => {
   const [s, setS] = useState(settings);
   const [newCurr, setNewCurr] = useState('');
@@ -325,7 +323,7 @@ export const SettingsForm = ({ settings, onSave, onExport, onRecurring, t }) => 
     for (const [key, value] of Object.entries(currencyMap)) { if (targetCurrency.includes(key)) { targetCurrency = value; break; } }
     if (targetCurrency.length !== 3) return alert("請輸入正確的國家關鍵字或 3 碼幣別");
     const currentList = s.travelCurrencies || []; if (currentList.find(x => x.code === targetCurrency)) return alert(`${targetCurrency} 已經在列表裡囉！`);
-    try { const res = await fetch(`https://open.er-api.com/v6/latest/${targetCurrency}`); const data = await res.json(); if (data.result === 'success' && data.rates.TWD) { const rate = Number(data.rates.TWD.toFixed(4)); setS(prev => ({...prev, travelCurrencies: [...(prev.travelCurrencies||[]), {code: targetCurrency, rate}]})); setNewCurr(''); alert(`新增成功！\n1 ${targetCurrency} = ${rate} TWD`); } else alert("找不到該幣別匯率，請手 manual 輸入"); } catch (e) { alert("抓取匯率失敗，請檢查網路"); }
+    try { const res = await fetch(`https://open.er-api.com/v6/latest/${targetCurrency}`); const data = await res.json(); if (data.result === 'success' && data.rates.TWD) { const rate = Number(data.rates.TWD.toFixed(4)); setS(prev => ({...prev, travelCurrencies: [...(prev.travelCurrencies||[]), {code: targetCurrency, rate}]})); setNewCurr(''); alert(`新增成功！\n1 ${targetCurrency} = ${rate} TWD`); } else alert("找不到該幣別匯率，請手動輸入"); } catch (e) { alert("抓取匯率失敗，請檢查網路"); }
   };
 
   return (
