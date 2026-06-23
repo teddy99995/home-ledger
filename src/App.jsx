@@ -306,7 +306,6 @@ export default function App() {
     showToast("匯出成功！請直接匯入 Google Sheets");
   };
 
-  // 🌞 🌙 樣式設定
   let t = ui.isDark ? { 
     bg: 'bg-[#0f172a]', cardInner: 'bg-[#1e293b]', text: 'text-[#f8fafc]', textM: 'text-[#94a3b8]', primary: 'bg-[#6366f1]', primaryText: 'text-[#818cf8]', border: 'border-[#334155]', input: 'bg-[#0f172a] text-white', ring: 'focus:ring-indigo-500'
   } : {
