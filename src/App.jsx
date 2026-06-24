@@ -37,15 +37,14 @@ const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMI
 const POPULAR_CURRENCIES = [
   { code: 'JPY', name: '日本' }, { code: 'USD', name: '美國' }, { code: 'EUR', name: '歐洲' },
   { code: 'KRW', name: '韓國' }, { code: 'HKD', name: '香港' }, { code: 'THB', name: '泰國' },
-  { code: 'GBP', name: '英國' }, { code: 'AUD', name: '澳洲' }, { code: 'RMB', name: '中國' },
+  { code: 'GBP', name: '英國' }, { code: 'AUD', name: '澳洲' }, { code: 'CNY', name: '中國' },
   { code: 'SGD', name: '新加坡' }, { code: 'MYR', name: '馬來西亞' }, { code: 'VND', name: '越南' },
-  { code: 'AED', name: '阿聯酋' }, { code: 'EGP', name: '埃及' }
+  { code: 'AED', name: '阿聯酋' }
 ];
 
 const getCurrencyName = (code) => POPULAR_CURRENCIES.find(c => c.code === code)?.name || code;
 const getCurrencyLabel = (code) => {
   if (code === 'TWD') return '台灣 (TWD)';
-  if (code === 'RMB') return '人民幣 (RMB)';
   const name = getCurrencyName(code);
   return name && name !== code ? `${name} (${code})` : code;
 };
@@ -183,6 +182,7 @@ export default function App() {
   // 🌟 分頁功能狀態
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 15;
+  const [newGlobalTag, setNewGlobalTag] = useState(''); // 首頁全域標籤輸入狀態
   
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -520,9 +520,9 @@ export default function App() {
     });
   };
 
-  // 🌟 還原為原本的 AI API 設定
+  // 🌟 還原為原本的 AI API 設定 (X-goog-api-key)
   const handleCallAI = async () => {
-    if (!apiKey) return showToast("系統未設定 API 金鑰！請在環境變數或檔案最上方設定", "error");
+    if (!apiKey) return showToast("請先在程式碼最上方設定您的 Gemini API Key", "error");
     setIsAiLoading(true); setAiAnalysis('');
     try {
       const topExpCats = Object.entries(tStats.expCat).map(([n,v]) => ({name:n, val:v})).sort((a,b)=>b.val-a.val).slice(0,3).map(c => `${c.name}(${Math.round(c.val/(tStats.exp||1)*100)}%)`).join('、');
@@ -531,7 +531,8 @@ export default function App() {
       
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
       const options = {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       };
 
@@ -1328,7 +1329,6 @@ export default function App() {
                       onDeleteTemplate={(id) => confirmDel('確定要刪除範本嗎？', () => deleteDoc(getDocRef('shared_templates', id)))}
                       onSave={handleTxSave}
                       onDeleteTx={(id) => confirmDel('確定要刪除這筆紀錄嗎？', () => deleteDoc(getDocRef('shared_ledger', id)))} 
-                      showToast={showToast}
                       t={t} ui={ui}
                     />
                   )}
@@ -1438,11 +1438,29 @@ export default function App() {
                     {ui.modal === 'tags' && (
                       <div className="space-y-5 pb-8 pt-2">
                         <div className="flex justify-between items-center px-1 mb-4">
-                           <span className={`font-bold text-sm ${t.text}`}>點選標籤進行過濾</span>
+                           <span className={`font-bold text-sm ${t.text}`}>管理與篩選標籤</span>
                            <div className="flex items-center gap-1.5">
                              <span className={`text-xs ${t.textM}`}>管理模式</span>
                              <ToggleSwitch checked={ui.isManageTags} onChange={(v) => updateUi({isManageTags: v})} isDark={ui.isDark} />
                            </div>
+                        </div>
+
+                        {/* 新增全域標籤輸入區塊 */}
+                        <div className={`flex items-center gap-2 p-1.5 rounded-[1.25rem] ${t.bg} border ${t.border} shadow-inner focus-within:ring-2 ${t.ring} transition-all mb-4`}>
+                           <Tag className={`w-5 h-5 ml-3 ${t.textM}`} />
+                           <input 
+                             value={newGlobalTag} 
+                             onChange={e => setNewGlobalTag(e.target.value)} 
+                             placeholder="輸入新標籤..." 
+                             className={`flex-1 bg-transparent px-2 py-3 outline-none font-bold text-base ${t.text}`}
+                           />
+                           <button 
+                             onClick={() => { handleAddGlobalTag(newGlobalTag); setNewGlobalTag(''); }} 
+                             disabled={!newGlobalTag.trim()} 
+                             className={`px-5 py-3 rounded-xl ${t.primary} ${t.primaryBtnText} font-bold text-sm shadow-md active:scale-95 disabled:opacity-50 transition-all`}
+                           >
+                             新增
+                           </button>
                         </div>
                         
                         {data.tags.length === 0 ? (
@@ -1451,7 +1469,7 @@ export default function App() {
                           <div className="flex flex-wrap gap-3">
                             {data.tags.map(tag => (
                               <div key={tag} className="relative group">
-                                <button onClick={() => !ui.isManageTags && updateUi({filterTags: ui.filterTags.includes(tag) ? ui.filterTags.filter(x=>x!==tag) : [...ui.filterTags,tag]})} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all ${ui.isManageTags ? `${t.bg} ${t.border} pr-10 opacity-70 cursor-default` : ui.filterTags.includes(tag) ? `${t.primary} ${t.primaryBtnText} border-transparent shadow-md` : `${t.bg} ${t.border} hover:border-[#E3B59B]/30`}`}>
+                                <button onClick={() => !ui.isManageTags && updateUi({filterTags: ui.filterTags.includes(tag) ? ui.filterTags.filter(x=>x!==tag) : [...ui.filterTags,tag]})} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all ${ui.isManageTags ? `${t.bg} ${t.border} pr-10 opacity-70 cursor-default` : ui.filterTags.includes(tag) ? `${t.primary} ${t.primaryBtnText} border-transparent shadow-md` : `${t.bg} ${t.border} hover:shadow-md`}`}>
                                   #{tag}
                                 </button>
                                 {ui.isManageTags && (
@@ -1484,7 +1502,7 @@ export default function App() {
 // ==========================================
 
 // 🌟 記帳表單 (旗艦升級：多幣別選擇 + 彈性比例拆帳 + 沉浸無縫計算機 + 優化標籤與相機)
-const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, onDeleteTx, showToast, t, ui }) => {
+const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, onDeleteTx, t, ui }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, 
     type: initialData?.type || 'expense', 
@@ -1562,7 +1580,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
     
     // 🌟 防呆：金額不得為 0 或不合法
     if (!finalAmount || finalAmount <= 0 || isNaN(finalAmount)) {
-       showToast("請輸入有效金額！", "error");
+       alert("請輸入有效金額！");
        return;
     }
 
@@ -1792,10 +1810,10 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
           </div>
         </div>
 
-        {/* 🌟 標籤橫向滑動列 (完全美化版) */}
+        {/* 🌟 標籤雲橫向自動換行列 (完全美化版) */}
         <div className="space-y-2 -mx-6 px-6 pt-2">
           <label className={`font-bold text-xs ${t.textM} px-1`}>快速標籤</label>
-          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2">
+          <div className="flex flex-wrap gap-2 pb-2">
              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[1rem] ${t.bg} border ${t.border} shadow-inner shrink-0 focus-within:ring-2 ${t.ring} transition-all`}>
                 <input value={newTag} onChange={e=>setNewTag(e.target.value)} placeholder="新標籤" className={`bg-transparent w-16 outline-none text-sm font-bold ${t.text} placeholder-${t.textM}`} />
                 <button onClick={handleAddNewTag} disabled={!newTag.trim()} className={`text-white bg-indigo-500 rounded-full p-1 shadow-sm disabled:opacity-50 active:scale-95 transition-all`}><Plus size={14}/></button>
@@ -1804,7 +1822,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
                 <button 
                   key={tg} 
                   onClick={() => setData(prev => ({...prev, tags: prev.tags.includes(tg) ? prev.tags.filter(x=>x!==tg) : [...prev.tags, tg]}))} 
-                  className={`shrink-0 px-4 py-2.5 rounded-[1rem] text-xs font-bold transition-all ${data.tags.includes(tg) ? `${t.primary} ${t.primaryBtnText} shadow-md border-transparent` : `${t.bg} border ${t.border} ${t.textM} hover:border-[#E3B59B]/30`}`}
+                  className={`shrink-0 px-4 py-2.5 rounded-[1rem] text-xs font-bold transition-all ${data.tags.includes(tg) ? `${t.primary} ${t.primaryBtnText} shadow-md border-transparent` : `${t.bg} border ${t.border} ${t.textM} hover:shadow-md`}`}
                 >
                   #{tg}
                 </button>
@@ -2120,8 +2138,8 @@ const SettingsForm = ({ settings, onSave, onExport, onRecurring, onCategories, t
       '日': 'JPY', 'jpy': 'JPY', '韓': 'KRW', 'krw': 'KRW', '美': 'USD', 'usd': 'USD', '歐': 'EUR', 'eur': 'EUR',
       '港': 'HKD', 'hkd': 'HKD', '泰': 'THB', 'thb': 'THB', '英': 'GBP', 'gbp': 'GBP', '澳': 'AUD', 'aud': 'AUD',
       '加': 'CAD', 'cad': 'CAD', '新': 'SGD', 'sgd': 'SGD', '馬': 'MYR', 'myr': 'MYR', '越': 'VND', 'vnd': 'VND',
-      '印尼': 'IDR', 'idr': 'IDR', '人民幣': 'CNY', '中': 'CNY', 'cny': 'CNY', 'rmb': 'CNY', 'RMB': 'CNY',
-      '阿': 'AED', '阿聯酋': 'AED', '杜拜': 'AED', 'aed': 'AED', '埃及': 'EGP', 'egp': 'EGP'
+      '印尼': 'IDR', 'idr': 'IDR', '人民幣': 'CNY', '中': 'CNY', 'cny': 'CNY', 'rmb': 'CNY',
+      '阿': 'AED', '阿聯酋': 'AED', '杜拜': 'AED', 'aed': 'AED'
     };
     
     for (const [key, value] of Object.entries(currencyMap)) { 
@@ -2465,7 +2483,7 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
       {step === 2 && (
         <div className="space-y-5 flex-1 flex flex-col animate-in slide-in-from-right-2">
           <p className={`font-bold text-xs ${t.textM} px-1`}>設定時間到了要自動記下的內容：</p>
-          <TxForm accounts={accounts} cats={cats} tags={[]} initialData={null} templates={[]} settings={{}} onAI={()=>{}} onAddTag={()=>{}} onSaveTemplate={()=>{}} onDeleteTemplate={()=>{}} onSave={(txData) => { setR({ ...r, txData }); setStep(3); }} showToast={()=>{}} t={t} ui={{isDark: t.bg.includes('16') || t.bg.includes('0B')}} />
+          <TxForm accounts={accounts} cats={cats} tags={[]} initialData={null} templates={[]} settings={{}} onAI={()=>{}} onAddTag={()=>{}} onSaveTemplate={()=>{}} onDeleteTemplate={()=>{}} onSave={(txData) => { setR({ ...r, txData }); setStep(3); }} t={t} ui={{isDark: t.bg.includes('16') || t.bg.includes('0B')}} />
         </div>
       )}
       {step === 3 && (
@@ -2507,7 +2525,7 @@ const AccForm = ({ onSave, t }) => {
             <button 
               key={x} 
               onClick={() => setI(x)} 
-              className={`p-4 border rounded-2xl shrink-0 transition-all ${i === x ? `${t.primaryText} ${t.bg} border-transparent shadow-md scale-105` : `${t.border} ${t.cardInner} hover:bg-black/5 dark:hover:bg-white/5`}`}
+              className={`p-4 border rounded-2xl shrink-0 transition-all ${i === x ? `${t.primaryText} ${t.bg} border-transparent shadow-md scale-105` : `${t.border} ${t.cardInner} hover:bg-stone-50 dark:hover:bg-slate-800`}`}
             >
               {x}
             </button>
