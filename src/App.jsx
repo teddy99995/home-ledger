@@ -16,7 +16,7 @@ import {
 // 1. 核心設定與資料庫初始化 (加入離線記帳支援)
 // ==========================================
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-  apiKey: "AIzaSyCegdtoILGfQEQqp7hzK5q--if0hViIOF8",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
   authDomain: "our-home-ledger-2254a.firebaseapp.com",
   projectId: "our-home-ledger-2254a",
   storageBucket: "our-home-ledger-2254a.firebasestorage.app",
