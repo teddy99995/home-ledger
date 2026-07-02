@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  /* 禁用左右滑動返回上一頁的瀏覽器原生行為 */
+  overscroll-behavior-x: none;
+  
+  /* 禁用上下滑動到底時的橡皮筋回彈效果 */
+  overscroll-behavior-y: none;
+  
+  /* 確保整體禁用觸控邊緣反彈，讓 Web App 具備原生軟體的封閉感 */
+  overscroll-behavior: none; 
+}
