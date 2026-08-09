@@ -789,7 +789,11 @@ export default function App() {
         .pt-safe { padding-top: calc(1rem + env(safe-area-inset-top)); }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        body { background-color: ${settings.travelMode ? (ui.isDark ? '#0B101E' : '#E0F2FE') : (ui.isDark ? '#161925' : '#FDFBF7')}; margin: 0; padding: 0; transition: background-color 0.5s ease; }
+        body { 
+  background-color: ${settings.travelMode ? (ui.isDark ? '#0B101E' : '#E0F2FE') : (ui.isDark ? '#161925' : '#FDFBF7')}; 
+  ${!ui.isDark && !settings.travelMode ? 'background-image: radial-gradient(#D6D3CD 1.5px, transparent 1.5px); background-size: 20px 20px;' : ''}
+  margin: 0; padding: 0; transition: background-color 0.5s ease; 
+}
         .donut-ring { stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: 2px solid ${ui.isDark ? '#E3B59B' : '#F5A623'}; margin-top: -8px; }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 8px; cursor: pointer; background: ${ui.isDark ? '#2D3348' : '#F0EBE1'}; border-radius: 4px; }
@@ -889,53 +893,12 @@ export default function App() {
               <div className="space-y-6 animate-in fade-in duration-300">
                 
                 {/* 🌟 活動帳戶篩選器 */}
-                {activeAccounts.map(a => (
-                        <div key={a.id} className={`p-5 rounded-3xl ${t.cardInner} shadow-sm border ${t.border} relative flex flex-col justify-between hover:shadow-md transition-all`}>
-                          {/* 🌟 上半部：圖示與帳戶名稱 */}
-                          <div>
-                            <div className="text-4xl drop-shadow-sm mb-2">{a.icon}</div>
-                            <span className="font-bold text-lg truncate block leading-tight">{a.name}</span>
-                            
-                            {/* 限額數字改為換行顯示，避免太長 */}
-                            {(a.singleLimit > 0 || a.monthlyLimit > 0) && (
-                              <div className={`text-[10px] font-bold ${t.textM} mt-1 leading-tight`}>
-                                {a.singleLimit > 0 && <div>單筆 ${a.singleLimit.toLocaleString()}</div>}
-                                {a.monthlyLimit > 0 && <div>每月 ${a.monthlyLimit.toLocaleString()}</div>}
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* 🌟 中間：總金額 */}
-                          <div className="text-2xl sm:text-3xl font-black drop-shadow-sm my-4 truncate">
-                            ${(accBal[a.id] || 0).toLocaleString()}
-                          </div>
-                          
-                          {/* 🌟 下半部：操作按鈕區 (獨立一排才不會擠) */}
-                          <div className={`flex items-center justify-end gap-2 pt-3 border-t border-dashed ${ui.isDark ? 'border-stone-700' : 'border-stone-200'}`}>
-                            <button 
-                              onClick={() => updateUi({ modal: 'account', selectedItem: a })} 
-                              className={`p-2 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}
-                              title="修改帳戶設定"
-                            >
-                              <Edit3 className="w-4 h-4"/>
-                            </button>
-                            <button 
-                              onClick={() => confirmAction('確定要封存此帳戶嗎？', () => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: true}))} 
-                              className={`p-2 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}
-                              title="封存帳戶"
-                            >
-                              <Archive className="w-4 h-4"/>
-                            </button>
-                            <button 
-                              onClick={() => confirmDel('危險操作：確定要刪除帳戶嗎？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} 
-                              className={`p-2 rounded-full ${t.bg} ${t.textM} hover:text-red-500 transition-colors shadow-sm`}
-                              title="刪除帳戶"
-                            >
-                              <Trash2 className="w-4 h-4"/>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.cardInner} overflow-x-auto hide-scrollbar gap-1 shadow-sm`}>
+                   <button onClick={() => updateUi({ filterAccount: 'all' })} className={`shrink-0 px-5 py-2.5 font-bold text-sm rounded-xl transition-all ${(!ui.filterAccount || ui.filterAccount === 'all') ? `${t.bg} shadow-md ${t.primaryText}` : t.textM}`}>全部帳戶</button>
+                   {activeAccounts.map(a => (
+                      <button key={a.id} onClick={() => updateUi({ filterAccount: a.id })} className={`shrink-0 px-5 py-2.5 font-bold text-sm rounded-xl transition-all ${ui.filterAccount === a.id ? `${t.bg} shadow-md ${t.primaryText}` : t.textM}`}>{a.name}</button>
+                   ))}
+                </div>
 
                 <section className={`${t.cardInner} rounded-[2.5rem] p-7 shadow-xl border ${t.border} relative overflow-hidden transition-all duration-500 hover:shadow-2xl hover:-translate-y-1`}>
                   {/* 🌟 升級版動態流光光暈 */}
@@ -952,11 +915,11 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-4 mb-6 relative z-10">
                       <div className={`p-5 rounded-[2rem] border ${t.border} ${t.bg} shadow-sm bg-gradient-to-br from-emerald-500/5 to-transparent`}>
                           <p className={`text-xs font-bold ${t.textM} mb-1 flex items-center gap-1.5`}><TrendingUp className="w-4 h-4 text-emerald-500"/>總收入</p>
-                          <h2 className="text-3xl font-black text-emerald-500 drop-shadow-sm">${hStats.inc.toLocaleString()}</h2>
+                          <h2 className="text-2xl sm:text-3xl font-black text-emerald-500 drop-shadow-sm">${hStats.inc.toLocaleString()}</h2>
                       </div>
                       <div className={`p-5 rounded-[2rem] border ${t.border} ${t.bg} shadow-sm bg-gradient-to-br from-rose-500/5 to-transparent`}>
                           <p className={`text-xs font-bold ${t.textM} mb-1 flex items-center gap-1.5`}><TrendingDown className="w-4 h-4 text-rose-500"/>總支出</p>
-                          <h2 className="text-3xl font-black text-rose-500 drop-shadow-sm">${hStats.exp.toLocaleString()}</h2>
+                          <h2 className="text-2xl sm:text-3xl font-black text-rose-500 drop-shadow-sm">${hStats.exp.toLocaleString()}</h2>
                       </div>
                   </div>
 
@@ -967,19 +930,25 @@ export default function App() {
                     </h2>
                   </div>
                   
-                  {/* 預算結轉 */}
-                  {rollover.enabled && !settings.travelMode && (!ui.filterAccount || ui.filterAccount === 'all') && (
-                    <div className={`mt-6 pt-5 border-t ${t.border} relative z-10`}>
+                  {/* 🌟 預算進度條 (獨立項目：無論是否結轉都會顯示) */}
+                  {!settings.travelMode && (!ui.filterAccount || ui.filterAccount === 'all') && (
+                    <div className={`mt-6 pt-5 border-t ${t.border} relative z-10 animate-in fade-in`}>
                        <div className="flex items-center gap-2 mb-3">
-                         <Sparkles className={`w-5 h-5 text-rose-500`} />
-                         <span className={`text-sm font-bold ${t.text}`}>上月預算結轉機制</span>
+                         <Sparkles className={`w-5 h-5 ${settings.enableRollover ? 'text-rose-500' : 'text-teal-500'}`} />
+                         <span className={`text-sm font-bold ${t.text}`}>
+                           {settings.enableRollover ? '上月預算結轉機制' : '本月預算進度'}
+                         </span>
                        </div>
                        <div className="flex justify-between items-center mb-3">
-                         <span className={`text-sm font-bold ${t.textM}`}>上月省下：<strong className="text-emerald-500">${rollover.amt.toLocaleString()}</strong></span>
+                         {settings.enableRollover ? (
+                           <span className={`text-sm font-bold ${t.textM}`}>上月省下：<strong className="text-emerald-500">${rollover.amt.toLocaleString()}</strong></span>
+                         ) : (
+                           <span className={`text-sm font-bold ${t.textM}`}>目前花費：<strong className="text-rose-500">${hStats.exp.toLocaleString()}</strong></span>
+                         )}
                          <span className={`text-sm font-bold ${t.textM}`}>本月可用：<strong className={t.text}>${rollover.budget.toLocaleString()}</strong></span>
                        </div>
                        <div className={`w-full h-2.5 ${t.bg} rounded-full overflow-hidden shadow-inner`}>
-                         <div className={`h-full ${t.primary} rounded-full transition-all duration-1000 ease-out`} style={{width: `${Math.min((hStats.exp/rollover.budget)*100, 100)}%`}}></div>
+                         <div className={`h-full ${t.primary} rounded-full transition-all duration-1000 ease-out`} style={{width: `${Math.min((hStats.exp / (rollover.budget || 1)) * 100, 100)}%`}}></div>
                        </div>
                     </div>
                   )}
@@ -1028,63 +997,46 @@ export default function App() {
                     }
                     
                     return (
-                      // 🌟 防誤觸設計：全卡片點擊，但改為打開右下角獨立的編輯與刪除小按鈕
-                      <div key={tx.id} className={`p-4 sm:p-5 rounded-3xl flex flex-col border ${t.border} ${t.cardInner} shadow-sm relative overflow-hidden transition-all hover:shadow-md hover:border-[#E3B59B]/30`}>
-                        <div className="flex items-center justify-between z-10">
-                          <div className="flex items-center gap-3 sm:gap-4 truncate">
-                            <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full ${t.bg} flex items-center justify-center text-xl sm:text-2xl shrink-0 shadow-inner`}>
-                              {tx.type === 'transfer' ? <ArrowRightLeft className="w-5 h-5 text-stone-500" /> : icon}
-                            </div>
-                            <div className="truncate">
-                              <p className="font-extrabold text-lg sm:text-xl truncate mb-1">
-                                {tx.type === 'transfer' ? '轉帳' : tx.category} 
-                                <span className={`text-xs ${t.textM} ml-2 font-bold`}>
-                                  {tx.type === 'transfer' ? 
-                                    `${data.accounts.find(a=>a.id===tx.fromAccountId)?.name} ➔ ${data.accounts.find(a=>a.id===tx.toAccountId)?.name}` 
-                                    : `(${data.accounts.find(a=>a.id===tx.accountId)?.name})`}
-                                </span>
-                              </p>
-                              <div className="flex gap-1.5 mt-1 flex-wrap items-center">
-                              {/* 🌟 付款人與平分顯示邏輯 */}
-                              {tx.type !== 'transfer' && (
-                                <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-lg font-bold ${t.bg} ${t.textM} border ${t.border}`}>
-                                  {tx.type === 'expense' ? '付:' : '收:'}
-                                  {tx.payer==='husband' ? '老公' : tx.payer==='wife' ? '老婆' : '共同'}
-                                  {tx.type === 'expense' ? (tx.split === 'none' ? '' : (tx.split === 'custom' && tx.splitMode === 'amount' && tx.splitExact ? ` (👨$${tx.splitExact.h}👩$${tx.splitExact.w})` : tx.split === 'custom' && tx.splitRatio ? ` (👨${tx.splitRatio.h}%👩${tx.splitRatio.w}%)` : ' (平分)')) : ''}
-                                </span>
-                              )}
-                              {/* 🌟 顯示日期與時間 */}
-                              <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-lg font-bold ${t.bg} ${t.textM} border ${t.border}`}>
-                                  {displayDateStr} {tx.recordTime || ''}
-                                </span>
-                                {tx.tags?.map(tg => <span key={tg} className={`text-[10px] sm:text-xs font-bold ${t.primaryText}`}>#{tg}</span>)}
-                                <span className={`text-xs sm:text-sm ${t.textM} font-bold truncate max-w-[120px] sm:max-w-[180px] ml-1`}>{tx.note}</span>
-                              </div>
-                            </div>
-                          </div>
+                      // 🌟 美化版：日曆撕頁感與手帳紙膠帶設計
+                      <div key={tx.id} className={`p-4 sm:p-5 rounded-[2rem] flex items-center gap-4 border-2 border-transparent ${ui.isDark ? 'bg-[#202536] border-[#2D3348]' : 'bg-white border-[#F0EBE1]/60 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]'} relative overflow-hidden transition-all hover:-translate-y-1 hover:shadow-lg group`}>
+                        {/* 🌟 裝飾用紙膠帶特效 */}
+                        {!ui.isDark && <div className="absolute -top-3 -left-3 w-12 h-6 bg-[#E3B59B]/40 -rotate-45 shadow-sm backdrop-blur-md"></div>}
+                        
+                        {/* 日期小日曆 */}
+                        <div className={`flex flex-col items-center justify-center shrink-0 w-14 h-14 rounded-[1.25rem] ${t.bg} border ${t.border} shadow-inner`}>
+                           <span className={`text-[10px] font-black ${t.primaryText} uppercase tracking-wider`}>{new Date(tx.date).toLocaleDateString('en-US', {month:'short'})}</span>
+                           <span className="text-xl font-black">{tx.date.split('-')[2]}</span>
+                        </div>
 
-                          {/* 🌟 金額與點擊提示區塊 */}
-                          <div className="flex flex-col items-end gap-2 shrink-0 ml-2">
-                            <span className={`font-black text-xl sm:text-2xl drop-shadow-sm ${tx.type === 'expense' ? t.text : tx.type === 'income' ? 'text-emerald-500' : t.textM}`}>
-                              {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}${tx.amount.toLocaleString()}
-                            </span>
-                            <div className="flex gap-1.5 sm:gap-2">
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); handleOpenTx(tx); }} 
-                                 className={`p-1.5 sm:p-2 rounded-full ${t.bg} border ${t.border} text-stone-500 hover:${t.primaryText} active:scale-95 transition-all shadow-sm`}
-                                 title="編輯這筆紀錄"
-                               >
-                                 <Edit3 size={14} className="sm:w-4 sm:h-4" />
-                               </button>
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); confirmDel('確定要將這筆紀錄移至垃圾桶嗎？ (保留 15 天)', () => updateDoc(getDocRef('shared_ledger', tx.id), {isDeleted: true, deletedAt: serverTimestamp()})); }} 
-                                 className={`p-1.5 sm:p-2 rounded-full ${ui.isDark ? 'bg-red-950/30 border-red-900/50 hover:bg-red-900/50' : 'bg-red-50 border-red-100 hover:bg-red-100'} text-red-500 active:scale-95 transition-all shadow-sm`}
-                                 title="刪除這筆紀錄"
-                               >
-                                 <Trash2 size={14} className="sm:w-4 sm:h-4" />
-                               </button>
-                            </div>
+                        {/* 虛線分隔 */}
+                        <div className={`w-px h-10 border-l-2 border-dashed ${t.border} opacity-60`}></div>
+
+                        {/* 內容區 */}
+                        <div className="flex-1 truncate">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xl drop-shadow-sm">{icon}</span>
+                            <p className="font-extrabold text-lg truncate">{tx.type === 'transfer' ? '轉帳' : tx.category}</p>
                           </div>
+                          <div className="flex gap-1.5 flex-wrap items-center">
+                            {tx.note && <span className={`text-[11px] font-bold ${t.textM} truncate max-w-[100px]`}>{tx.note}</span>}
+                            {tx.tags?.map(tg => <span key={tg} className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold bg-[#E3B59B]/10 ${t.primaryText}`}>#{tg}</span>)}
+                          </div>
+                        </div>
+
+                        {/* 金額與帳戶區 */}
+                        <div className="flex flex-col items-end gap-1 pr-2">
+                          <span className={`font-black text-xl drop-shadow-sm ${tx.type === 'expense' ? t.text : tx.type === 'income' ? 'text-emerald-500' : t.textM}`}>
+                            {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}${tx.amount.toLocaleString()}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${t.bg} border ${t.border} ${t.textM}`}>
+                             {tx.type === 'transfer' ? `${data.accounts.find(a=>a.id===tx.fromAccountId)?.name}➔` : data.accounts.find(a=>a.id===tx.accountId)?.name}
+                          </span>
+                        </div>
+
+                        {/* 🌟 隱藏的編輯/刪除滑動選單 (滑鼠游標經過時出現) */}
+                        <div className={`absolute right-0 inset-y-0 flex items-center justify-center gap-2 pl-6 pr-4 bg-gradient-to-l ${ui.isDark ? 'from-[#202536] via-[#202536]' : 'from-white via-white'} to-transparent translate-x-full group-hover:translate-x-0 transition-transform duration-300`}>
+                           <button onClick={(e) => { e.stopPropagation(); handleOpenTx(tx); }} className={`p-2.5 rounded-full ${t.bg} border ${t.border} text-stone-500 hover:${t.primaryText} shadow-sm active:scale-95`}><Edit3 size={16} /></button>
+                           <button onClick={(e) => { e.stopPropagation(); confirmDel('確定刪除？', () => updateDoc(getDocRef('shared_ledger', tx.id), {isDeleted: true, deletedAt: serverTimestamp()})); }} className={`p-2.5 rounded-full bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50 text-red-500 shadow-sm active:scale-95`}><Trash2 size={16} /></button>
                         </div>
                       </div>
                     )
@@ -1103,56 +1055,54 @@ export default function App() {
                 
                 <div className="space-y-4">
                     <h3 className={`font-bold text-sm ${t.textM} px-2`}>活動帳戶</h3>
-                    <div className="grid grid-cols-2 gap-4">
+                    
+                    {/* 🌟 改回 grid-cols-2 (雙排)，並採用微縮極簡設計 */}
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
                       {activeAccounts.map(a => (
-  <div key={a.id} className={`p-6 rounded-3xl ${t.cardInner} shadow-sm border ${t.border} relative flex flex-col hover:shadow-md transition-all`}>
-    <div className="flex items-center justify-between mb-4">
-      <div className="flex items-center gap-3">
-        <span className="text-4xl drop-shadow-sm">{a.icon}</span>
-        <div>
-          <span className="font-bold text-lg truncate block">{a.name}</span>
-          {/* 🌟 顯示當前設定的限額數字 */}
-          {(a.singleLimit > 0 || a.monthlyLimit > 0) && (
-            <p className={`text-[11px] font-bold ${t.textM} mt-0.5`}>
-              {a.singleLimit > 0 && `單筆 $${a.singleLimit.toLocaleString()} `}
-              {a.monthlyLimit > 0 && `每月 $${a.monthlyLimit.toLocaleString()}`}
-            </p>
-          )}
-        </div>
-      </div>
-      
-      {/* 🌟 操作按鈕常駐顯示，不會隱藏，隨時可點擊 */}
-      <div className="flex items-center gap-1">
-        <button 
-          onClick={() => updateUi({ modal: 'account', selectedItem: a })} 
-          className={`p-2 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}
-          title="修改帳戶設定"
-        >
-          <Edit3 className="w-4 h-4"/>
-        </button>
-        <button 
-          onClick={() => confirmAction('確定要封存此帳戶嗎？', () => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: true}))} 
-          className={`p-2 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}
-          title="封存帳戶"
-        >
-          <Archive className="w-4 h-4"/>
-        </button>
-        <button 
-          onClick={() => confirmDel('危險操作：確定要刪除帳戶嗎？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} 
-          className={`p-2 rounded-full ${t.bg} ${t.textM} hover:text-red-500 transition-colors shadow-sm`}
-          title="刪除帳戶"
-        >
-          <Trash2 className="w-4 h-4"/>
-        </button>
-      </div>
-    </div>
+                        <div key={a.id} className={`p-4 rounded-[1.5rem] ${t.cardInner} shadow-sm border ${t.border} relative flex flex-col justify-between hover:shadow-md transition-all group`}>
+                          
+                          {/* 🌟 上半部：圖示與名稱縮排 */}
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="text-3xl drop-shadow-sm shrink-0">{a.icon}</div>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-extrabold text-sm truncate block">{a.name}</span>
+                            </div>
+                          </div>
+                          
+                          {/* 🌟 中間：總金額 */}
+                          <div className="text-xl font-black drop-shadow-sm mb-1 truncate">
+                            ${(accBal[a.id] || 0).toLocaleString()}
+                          </div>
 
-    <div className="text-3xl font-black drop-shadow-sm">${(accBal[a.id] || 0).toLocaleString()}</div>
-  </div>
-))}
-                      <div onClick={() => updateUi({ modal: 'account' })} className={`bg-transparent border-2 border-dashed ${t.border} rounded-3xl p-6 flex flex-col items-center justify-center ${t.textM} cursor-pointer min-h-[160px] hover:border-[#E3B59B] hover:${t.primaryText} hover:bg-[#E3B59B]/10 transition-all active:scale-95`}>
-                        <Plus className="w-10 h-10 mb-3"/>
-                        <span className="text-lg font-bold">新增帳戶</span>
+                          {/* 🌟 限額微型字體 (無設定時保留高度避免跳動) */}
+                          <div className={`text-[9px] font-bold ${t.textM} h-3 truncate mb-2`}>
+                            {(a.singleLimit > 0 || a.monthlyLimit > 0) ? (
+                              a.monthlyLimit > 0 ? `月限 $${a.monthlyLimit.toLocaleString()}` : `單筆 $${a.singleLimit.toLocaleString()}`
+                            ) : ''}
+                          </div>
+                          
+                          {/* 🌟 下半部：極致微縮按鈕區，保證絕不破版 */}
+                          <div className={`flex items-center justify-end gap-1.5 pt-2 border-t border-dashed ${ui.isDark ? 'border-stone-700' : 'border-stone-200'}`}>
+                            <button 
+                              onClick={() => updateUi({ modal: 'account', selectedItem: a })} 
+                              className={`p-1.5 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors`}
+                            ><Edit3 className="w-3.5 h-3.5"/></button>
+                            <button 
+                              onClick={() => confirmAction('確定要封存此帳戶嗎？', () => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: true}))} 
+                              className={`p-1.5 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors`}
+                            ><Archive className="w-3.5 h-3.5"/></button>
+                            <button 
+                              onClick={() => confirmDel('危險操作：確定要刪除帳戶嗎？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} 
+                              className={`p-1.5 rounded-full ${t.bg} ${t.textM} hover:text-red-500 transition-colors`}
+                            ><Trash2 className="w-3.5 h-3.5"/></button>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {/* 新增帳戶按鈕也配合變小巧 */}
+                      <div onClick={() => updateUi({ modal: 'account' })} className={`bg-transparent border-2 border-dashed ${t.border} rounded-[1.5rem] p-4 flex flex-col items-center justify-center ${t.textM} cursor-pointer min-h-[130px] hover:border-[#E3B59B] hover:${t.primaryText} hover:bg-[#E3B59B]/10 transition-all active:scale-95`}>
+                        <Plus className="w-8 h-8 mb-2"/>
+                        <span className="text-sm font-bold">新增帳戶</span>
                       </div>
                     </div>
                 </div>
@@ -1578,35 +1528,37 @@ export default function App() {
             )}
           </main>
 
-          {/* ================= 浮動導覽列 (升級磨砂玻璃質感) ================= */}
-          <div className="fixed bottom-0 left-0 right-0 z-40 flex justify-center pointer-events-none">
-            <div className="w-full max-w-md md:max-w-xl relative pointer-events-auto">
-              <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-50 group">
+          {/* ================= 懸浮膠囊導覽列 (美化手帳風) ================= */}
+          <div className="fixed bottom-6 pb-safe left-0 right-0 z-40 flex justify-center pointer-events-none px-4">
+            <div className="w-full max-w-md md:max-w-lg relative pointer-events-auto">
+              {/* 🌟 發光漣漪記帳按鈕 */}
+              <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-50 group">
                 <div className={`absolute inset-1 rounded-full ${t.primary} opacity-40 animate-ping group-hover:animate-none duration-1000`}></div>
-                
-                <button onClick={() => handleOpenTx(null)} className={`relative h-[72px] w-[72px] ${t.primary} ${t.primaryBtnText} rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(0,0,0,0.2)] active:scale-95 transition-all border-[6px] ${ui.isDark ? 'border-[#161925]' : 'border-[#FDFBF7]'} hover:scale-105 hover:brightness-110`}>
+                <button onClick={() => handleOpenTx(null)} className={`relative h-[68px] w-[68px] ${t.primary} ${t.primaryBtnText} rounded-full flex items-center justify-center shadow-[0_8px_25px_rgba(0,0,0,0.2)] active:scale-95 transition-all border-[4px] ${ui.isDark ? 'border-[#202536]' : 'border-white'} hover:scale-105`}>
                   <Plus className="w-8 h-8" strokeWidth={3} />
                 </button>
               </div>
-              <nav className={`w-full ${ui.isDark ? 'bg-[#202536]/80' : 'bg-white/80'} backdrop-blur-xl border-t ${t.border} px-8 pb-safe pt-3 flex justify-between items-center h-[80px] rounded-t-[2.5rem] shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] transition-colors duration-500`}>
-                <div className="flex gap-8">
-                  <button onClick={() => updateUi({ tab: 'home' })} className={`flex flex-col items-center gap-1.5 transition-colors ${ui.tab === 'home' ? t.primaryText : t.textM}`}>
-                    <Home className="w-6 h-6" />
+              
+              {/* 🌟 懸浮膠囊導覽主體 */}
+              <nav className={`w-full ${ui.isDark ? 'bg-[#202536]/90' : 'bg-white/90'} backdrop-blur-xl border ${t.border} px-6 py-3 flex justify-between items-center h-[72px] rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.08)] transition-all duration-500`}>
+                <div className="flex gap-6 sm:gap-8">
+                  <button onClick={() => updateUi({ tab: 'home' })} className={`flex flex-col items-center gap-1 transition-colors ${ui.tab === 'home' ? t.primaryText : t.textM}`}>
+                    <Home className={`w-6 h-6 ${ui.tab === 'home' ? 'fill-current' : ''}`} />
                     <span className="text-[10px] font-bold">首頁</span>
                   </button>
-                  <button onClick={() => updateUi({ tab: 'wallets' })} className={`flex flex-col items-center gap-1.5 transition-colors ${ui.tab === 'wallets' ? t.primaryText : t.textM}`}>
-                    <Wallet className="w-6 h-6" />
+                  <button onClick={() => updateUi({ tab: 'wallets' })} className={`flex flex-col items-center gap-1 transition-colors ${ui.tab === 'wallets' ? t.primaryText : t.textM}`}>
+                    <Wallet className={`w-6 h-6 ${ui.tab === 'wallets' ? 'fill-current' : ''}`} />
                     <span className="text-[10px] font-bold">帳戶</span>
                   </button>
                 </div>
                 <div className="w-16 shrink-0"></div> 
-                <div className="flex gap-8">
-                  <button onClick={() => updateUi({ tab: 'stats' })} className={`flex flex-col items-center gap-1.5 transition-colors ${ui.tab === 'stats' ? t.primaryText : t.textM}`}>
-                    <PieChartIcon className="w-6 h-6" />
+                <div className="flex gap-6 sm:gap-8">
+                  <button onClick={() => updateUi({ tab: 'stats' })} className={`flex flex-col items-center gap-1 transition-colors ${ui.tab === 'stats' ? t.primaryText : t.textM}`}>
+                    <PieChartIcon className={`w-6 h-6 ${ui.tab === 'stats' ? 'fill-current' : ''}`} />
                     <span className="text-[10px] font-bold">統計</span>
                   </button>
-                  <button onClick={() => updateUi({ tab: 'life' })} className={`flex flex-col items-center gap-1.5 transition-colors ${ui.tab === 'life' ? t.primaryText : t.textM}`}>
-                    <ClipboardList className="w-6 h-6" />
+                  <button onClick={() => updateUi({ tab: 'life' })} className={`flex flex-col items-center gap-1 transition-colors ${ui.tab === 'life' ? t.primaryText : t.textM}`}>
+                    <ClipboardList className={`w-6 h-6 ${ui.tab === 'life' ? 'fill-current' : ''}`} />
                     <span className="text-[10px] font-bold">生活</span>
                   </button>
                 </div>
@@ -3436,4 +3388,5 @@ const FundForm = ({ goal, onSave, t }) => {
       </button>
     </div>
   );
+
 };
