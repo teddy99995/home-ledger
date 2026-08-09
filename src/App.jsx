@@ -28,10 +28,13 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 🌟 啟動無縫離線記帳模式 (Offline Support)
-enableIndexedDbPersistence(db).catch((err) => {
-  console.warn("離線記帳啟動失敗 (可能因多開分頁或瀏覽器不支援):", err.code);
-});
+// 🌟 啟動無縫離線記帳模式 (Offline Support) - 加入防重複執行保護
+if (!window._firestorePersistenceEnabled) {
+  enableIndexedDbPersistence(db).catch((err) => {
+    console.warn("離線記帳啟動失敗 (可能因多開分頁或瀏覽器不支援):", err.code);
+  });
+  window._firestorePersistenceEnabled = true;
+}
 
 // 🔑 Gemini API Key (依使用者需求還原環境變數設定)
 const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || 
@@ -156,7 +159,7 @@ const LineChart = ({ data, t }) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [data, setData] = useState({ 
-    tx: [], trash: [], accounts: [], bills: [], notes: [], shopping: [], goals: [], events: [], tags: [], recurringRules: [], templates: [], categories: DEFAULT_CATEGORIES 
+    tx: [], trash: [], accounts: [], bills: [], savings: [], notes: [], shopping: [], goals: [], events: [], tags: [], recurringRules: [], templates: [], categories: DEFAULT_CATEGORIES 
   });
   
   const [settings, setSettings] = useState({ 
@@ -230,6 +233,9 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const unsubs = [
+      onSnapshot(getCol('shared_savings'), snap => {
+        setData(p => ({ ...p, savings: snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.dueDate - b.dueDate) }))
+      }),
       onSnapshot(getCol('shared_accounts'), snap => {
         if (snap.empty) {
           const defaults = [
@@ -308,6 +314,70 @@ export default function App() {
         }
     });
   }, [data.trash]);
+
+  // 🌟 新增：跨月自動重置固定帳單 (與存錢計畫) 的已繳狀態
+  useEffect(() => {
+    if (!user || (!data.bills.length && !data.savings.length)) return;
+    
+    const currentMonth = getLocalYYYYMM(new Date());
+    
+    const checkAndReset = async () => {
+      const updates = [];
+
+      data.bills.forEach((bill) => {
+        // 如果已繳，且 (沒有紀錄月份 或 月份不是這個月)，就排入重置任務
+        if (bill.isPaid && (!bill.lastPaidMonth || bill.lastPaidMonth !== currentMonth)) {
+          updates.push(updateDoc(getDocRef('shared_bills', bill.id), { isPaid: false }));
+        }
+      });
+      
+      data.savings.forEach((saving) => {
+        if (saving.isSaved && (!saving.lastSavedMonth || saving.lastSavedMonth !== currentMonth)) {
+          updates.push(updateDoc(getDocRef('shared_savings', saving.id), { isSaved: false }));
+        }
+      });
+
+      // 統一執行所有重置，避免 Firebase 衝突
+      if (updates.length > 0) {
+        await Promise.all(updates).catch(e => console.error("重置失敗", e));
+      }
+    };
+
+    checkAndReset();
+  }, [user, data.bills, data.savings]);
+
+  // 🌟 新增：跨月自動重置固定帳單 (與存錢計畫) 的已繳狀態
+  useEffect(() => {
+    // 如果還沒登入，或是沒有帳單也沒有存錢計畫，就不執行
+    if (!user || (!data.bills.length && !data.savings.length)) return;
+    
+    const currentMonth = getLocalYYYYMM(new Date());
+    
+    const checkAndReset = async () => {
+      const updates = [];
+
+      data.bills.forEach((bill) => {
+        // 如果是已繳狀態，而且(沒有紀錄月份 或 月份不是這個月)，就排入重置
+        if (bill.isPaid && (!bill.lastPaidMonth || bill.lastPaidMonth !== currentMonth)) {
+          updates.push(updateDoc(getDocRef('shared_bills', bill.id), { isPaid: false }).catch(e => console.error(e)));
+        }
+      });
+      
+      data.savings.forEach((saving) => {
+        // 存錢計畫也做一樣的檢查
+        if (saving.isSaved && (!saving.lastSavedMonth || saving.lastSavedMonth !== currentMonth)) {
+          updates.push(updateDoc(getDocRef('shared_savings', saving.id), { isSaved: false }).catch(e => console.error(e)));
+        }
+      });
+
+      // 統一執行所有重置
+      if (updates.length > 0) {
+        await Promise.all(updates);
+      }
+    };
+
+    checkAndReset();
+  }, [user, data.bills, data.savings]);
 
   useEffect(() => {
     if (!user || data.recurringRules.length === 0 || processedRecurring.current) return;
@@ -483,13 +553,13 @@ export default function App() {
     const today = new Date().getDate(); 
     const notifyDays = settings.notifyAdvanceDays || 3;
     
-    if (settings.notifyBillDue) {
-      data.bills.forEach(b => { 
-        if (!b.isPaid && b.dueDate - today >= 0 && b.dueDate - today <= notifyDays) {
+    if (settings.notifyBillDue) { // 這裡共用帳單的推播開關
+      data.savings.forEach(s => { 
+        if (!s.isSaved && s.dueDate - today >= 0 && s.dueDate - today <= notifyDays) {
           a.push({ 
-            id: `b_${b.id}`, icon: b.icon || '🧾', title: '帳單到期', 
-            desc: `${b.name} 將在 ${b.dueDate - today === 0 ? '今天' : `${b.dueDate - today} 天後`} 到期`,
-            action: 'pay_bill', bill: b
+            id: `s_${s.id}`, icon: s.icon || '💰', title: '存錢計畫提醒', 
+            desc: `${s.name} 將在 ${s.dueDate - today === 0 ? '今天' : `${s.dueDate - today} 天後`} 執行存入`,
+            action: 'do_saving', saving: s
           }); 
         }
       });
@@ -547,26 +617,65 @@ export default function App() {
     });
   };
 
-  // 🌟 帳單一鍵入帳功能
+// 🌟 修改後的帳單一鍵入帳功能 (支援單/多帳戶自動記帳)
   const handleOneClickPay = (bill) => {
     confirmAction(`確定要將「${bill.name}」($${bill.amount.toLocaleString()}) 寫入帳本並標示為已繳？`, async () => {
+        // 取得要扣款的帳戶陣列 (相容沒有這個欄位的舊資料)
+        const accIds = bill.accountIds && bill.accountIds.length > 0 ? bill.accountIds : [activeAccounts[0]?.id].filter(Boolean);
+        const splitAmount = Math.round(Number(bill.amount) / accIds.length); // 如果多選則平分金額
+
+        // 為每個選擇的帳戶建立記帳明細
+        for (const accId of accIds) {
+            const txPayload = {
+                type: 'expense',
+                category: '居家', 
+                accountId: accId,
+                amount: splitAmount,
+                note: accIds.length > 1 ? `${bill.name} (共同分攤)` : bill.name,
+                date: getLocalYYYYMMDD(new Date()),
+                month: getLocalYYYYMM(new Date()),
+                recordTime: getLocalHHmm(new Date()),
+                payer: activeAccounts.find(a => a.id === accId)?.type || 'joint', 
+                split: 'none',
+                tags: ['固定帳單'],
+                createdAt: serverTimestamp(),
+                createdBy: user ? user.uid : 'unknown'
+            };
+            await addDoc(getCol('shared_ledger'), txPayload);
+        }
+        
+        // 更新帳單為已繳並紀錄月份
+        await updateDoc(getDocRef('shared_bills', bill.id), { isPaid: true, lastPaidMonth: getLocalYYYYMM(new Date()) });
+    });
+  };
+
+  // 🌟 存錢一鍵入帳功能 (支援跨月自動重置)
+  const handleOneClickSaving = (saving) => {
+    confirmAction(`確定要將「${saving.name}」($${saving.amount.toLocaleString()}) 寫入帳本並標示為已存？`, async () => {
         const txPayload = {
-            type: 'expense',
-            category: '居家', // 預設使用居家，使用者事後可改
-            accountId: activeAccounts[0]?.id || '',
-            amount: Number(bill.amount),
-            note: bill.name,
+            type: 'transfer', 
+            category: '存錢計畫', 
+            accountId: saving.accountId, 
+            toAccountId: saving.accountId,
+            fromAccountId: activeAccounts[0]?.id || '', 
+            amount: Number(saving.amount),
+            note: saving.name,
             date: getLocalYYYYMMDD(new Date()),
             month: getLocalYYYYMM(new Date()),
             recordTime: getLocalHHmm(new Date()),
             payer: 'joint', 
             split: 'none',
-            tags: ['固定帳單'],
+            tags: ['自動存錢'],
             createdAt: serverTimestamp(),
             createdBy: user ? user.uid : 'unknown'
         };
         await addDoc(getCol('shared_ledger'), txPayload);
-        await updateDoc(getDocRef('shared_bills', bill.id), { isPaid: true });
+        
+        // 🌟 這裡新增了 lastSavedMonth，記錄是在哪個月存的
+        await updateDoc(getDocRef('shared_savings', saving.id), { 
+            isSaved: true, 
+            lastSavedMonth: getLocalYYYYMM(new Date()) 
+        });
     });
   };
 
@@ -737,33 +846,40 @@ export default function App() {
             </div>
           )}
 
-          {/* 🌟 頂部 Header */}
-          <header className={`px-6 pt-safe pb-4 flex justify-between items-center ${t.cardInner} z-10 shrink-0 border-b ${t.border}`}>
-            <div className="flex gap-3 w-24">
-               <button onClick={() => updateUi({ isDark: !ui.isDark })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all text-stone-500 hover:${t.primaryText}`}>
-                 {ui.isDark ? <Sun className="w-5 h-5"/> : <Moon className="w-5 h-5"/>}
-               </button>
-               <button onClick={() => updateUi({ modal: 'settings' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all text-stone-500 hover:${t.primaryText}`}>
-                 <Settings className="w-5 h-5"/>
-               </button>
-            </div>
-            <div className="flex-1 text-center">
-              <h1 className="text-2xl font-black tracking-wider flex items-center justify-center gap-1.5">
-                {settings.travelMode && <Plane className="w-5 h-5 text-[#0EA5E9]" />} 
-                Home Ledger 
-                {!settings.travelMode && <span className="text-rose-500">♡</span>}
-              </h1>
-            </div>
-            <div className="flex gap-3 w-24 justify-end relative">
-              <button onClick={() => updateUi({ modal: 'barcode' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all text-stone-500 hover:${t.primaryText}`}>
-                <Barcode className="w-5 h-5"/>
-              </button>
-              <button onClick={() => updateUi({ modal: 'notify' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-sm transition-all relative text-stone-500 hover:${t.primaryText}`}>
-                <Bell className="w-5 h-5"/>
-                {activeAlerts.length > 0 && <span className={`absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 border-2 ${ui.isDark ? 'border-[#202536]' : 'border-white'} rounded-full`}></span>}
-              </button>
-            </div>
-          </header>
+          {/* 🌟 頂部 Header：升級玻璃透視與動態問候 */}
+          {(() => {
+            const hour = new Date().getHours();
+            const greeting = hour < 12 ? '早安' : hour < 18 ? '午安' : '晚安';
+            return (
+              <header className={`sticky top-0 px-6 pt-safe pb-4 flex justify-between items-center z-30 border-b ${t.border} ${ui.isDark ? 'bg-[#161925]/85' : 'bg-[#FDFBF7]/85'} backdrop-blur-xl transition-all shadow-sm`}>
+                <div className="flex gap-3 w-24">
+                   <button onClick={() => updateUi({ isDark: !ui.isDark })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-md transition-all text-stone-500 hover:${t.primaryText}`}>
+                     {ui.isDark ? <Sun className="w-5 h-5"/> : <Moon className="w-5 h-5"/>}
+                   </button>
+                   <button onClick={() => updateUi({ modal: 'settings' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-md transition-all text-stone-500 hover:${t.primaryText}`}>
+                     <Settings className="w-5 h-5"/>
+                   </button>
+                </div>
+                <div className="flex-1 text-center">
+                  <h1 className="text-xl font-black tracking-wider flex items-center justify-center gap-1.5">
+                    <span className={`text-sm font-bold ${t.textM} mr-1`}>{greeting}，</span>
+                    {settings.travelMode && <Plane className="w-5 h-5 text-[#0EA5E9]" />} 
+                    Home Ledger 
+                    {!settings.travelMode && <span className="text-rose-500 animate-pulse">♡</span>}
+                  </h1>
+                </div>
+                <div className="flex gap-3 w-24 justify-end relative">
+                  <button onClick={() => updateUi({ modal: 'barcode' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-md transition-all text-stone-500 hover:${t.primaryText}`}>
+                    <Barcode className="w-5 h-5"/>
+                  </button>
+                  <button onClick={() => updateUi({ modal: 'notify' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-md transition-all relative text-stone-500 hover:${t.primaryText}`}>
+                    <Bell className="w-5 h-5"/>
+                    {activeAlerts.length > 0 && <span className={`absolute top-1 right-1 w-3 h-3 bg-red-500 border-2 ${ui.isDark ? 'border-[#202536]' : 'border-white'} rounded-full animate-bounce`}></span>}
+                  </button>
+                </div>
+              </header>
+            );
+          })()}
 
           {/* 主畫面 */}
           <main className={`px-6 space-y-8 flex-1 overflow-y-auto pb-40 pt-4 hide-scrollbar ${t.bg}`}>
@@ -780,8 +896,10 @@ export default function App() {
                    ))}
                 </div>
 
-                <section className={`${t.cardInner} rounded-[2.5rem] p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border ${t.border} relative overflow-hidden`}>
-                  <div className={`absolute top-0 right-0 w-64 h-64 bg-gradient-to-br ${ui.isDark ? 'from-[#E3B59B]/5' : 'from-indigo-500/5'} to-purple-500/5 rounded-full blur-3xl pointer-events-none`}></div>
+                <section className={`${t.cardInner} rounded-[2.5rem] p-7 shadow-xl border ${t.border} relative overflow-hidden transition-all duration-500 hover:shadow-2xl hover:-translate-y-1`}>
+                  {/* 🌟 升級版動態流光光暈 */}
+                  <div className={`absolute -top-10 -right-10 w-64 h-64 bg-gradient-to-br ${ui.isDark ? 'from-[#E3B59B]/10' : 'from-indigo-500/10'} to-purple-500/10 rounded-full blur-[60px] pointer-events-none animate-pulse`}></div>
+                  <div className={`absolute -bottom-10 -left-10 w-48 h-48 bg-gradient-to-tr ${ui.isDark ? 'from-rose-500/10' : 'from-emerald-500/10'} to-transparent rounded-full blur-[40px] pointer-events-none`}></div>
                   
                   <div className="flex justify-between items-center mb-6 relative z-10">
                      <button onClick={() => updateUi({ modal: 'date' })} className={`flex items-center gap-2 font-bold text-lg ${t.text} ${t.bg} px-5 py-2.5 rounded-xl border ${t.border} active:scale-95 transition-all hover:border-[#E3B59B]/30`}>
@@ -946,23 +1064,51 @@ export default function App() {
                     <h3 className={`font-bold text-sm ${t.textM} px-2`}>活動帳戶</h3>
                     <div className="grid grid-cols-2 gap-4">
                       {activeAccounts.map(a => (
-                        <div key={a.id} className={`p-6 rounded-3xl ${t.cardInner} shadow-sm border ${t.border} relative group flex flex-col hover:shadow-md transition-all`}>
-                          <div className="flex items-center gap-3 mb-4">
-                            <span className="text-4xl drop-shadow-sm">{a.icon}</span>
-                            <span className="font-bold text-lg truncate">{a.name}</span>
-                          </div>
-                          <div className="text-3xl font-black drop-shadow-sm">${(accBal[a.id] || 0).toLocaleString()}</div>
-                          
-                          <div className="flex justify-end mt-4 pt-4 border-t border-transparent group-hover:border-stone-100 dark:group-hover:border-[#2D3348] gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                             <button onClick={() => confirmAction('確定要封存此帳戶嗎？封存後記帳不再顯示，但歷史記錄保留。', () => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: true}))} className={`p-2.5 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}>
-                               <Archive className="w-4 h-4"/>
-                             </button>
-                             <button onClick={() => confirmDel('危險操作：確定要刪除帳戶嗎？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} className={`p-2.5 rounded-full ${t.bg} ${t.textM} hover:text-red-500 transition-colors shadow-sm`}>
-                               <Trash2 className="w-4 h-4"/>
-                             </button>
-                          </div>
-                        </div>
-                      ))}
+  <div key={a.id} className={`p-6 rounded-3xl ${t.cardInner} shadow-sm border ${t.border} relative flex flex-col hover:shadow-md transition-all`}>
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-3">
+        <span className="text-4xl drop-shadow-sm">{a.icon}</span>
+        <div>
+          <span className="font-bold text-lg truncate block">{a.name}</span>
+          {/* 🌟 顯示當前設定的限額數字 */}
+          {(a.singleLimit > 0 || a.monthlyLimit > 0) && (
+            <p className={`text-[11px] font-bold ${t.textM} mt-0.5`}>
+              {a.singleLimit > 0 && `單筆 $${a.singleLimit.toLocaleString()} `}
+              {a.monthlyLimit > 0 && `每月 $${a.monthlyLimit.toLocaleString()}`}
+            </p>
+          )}
+        </div>
+      </div>
+      
+      {/* 🌟 操作按鈕常駐顯示，不會隱藏，隨時可點擊 */}
+      <div className="flex items-center gap-1">
+        <button 
+          onClick={() => updateUi({ modal: 'account', selectedItem: a })} 
+          className={`p-2 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}
+          title="修改帳戶設定"
+        >
+          <Edit3 className="w-4 h-4"/>
+        </button>
+        <button 
+          onClick={() => confirmAction('確定要封存此帳戶嗎？', () => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: true}))} 
+          className={`p-2 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}
+          title="封存帳戶"
+        >
+          <Archive className="w-4 h-4"/>
+        </button>
+        <button 
+          onClick={() => confirmDel('危險操作：確定要刪除帳戶嗎？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} 
+          className={`p-2 rounded-full ${t.bg} ${t.textM} hover:text-red-500 transition-colors shadow-sm`}
+          title="刪除帳戶"
+        >
+          <Trash2 className="w-4 h-4"/>
+        </button>
+      </div>
+    </div>
+
+    <div className="text-3xl font-black drop-shadow-sm">${(accBal[a.id] || 0).toLocaleString()}</div>
+  </div>
+))}
                       <div onClick={() => updateUi({ modal: 'account' })} className={`bg-transparent border-2 border-dashed ${t.border} rounded-3xl p-6 flex flex-col items-center justify-center ${t.textM} cursor-pointer min-h-[160px] hover:border-[#E3B59B] hover:${t.primaryText} hover:bg-[#E3B59B]/10 transition-all active:scale-95`}>
                         <Plus className="w-10 h-10 mb-3"/>
                         <span className="text-lg font-bold">新增帳戶</span>
@@ -1146,6 +1292,7 @@ export default function App() {
               <div className="space-y-6 animate-in fade-in duration-300">
                 <div className={`flex ${t.cardInner} p-1.5 rounded-2xl border ${t.border} shadow-sm overflow-x-auto hide-scrollbar`}>
                   {[
+                    { id: 'savings', label: '存錢', icon: <Coins className="w-5 h-5"/> },
                     { id: 'bills', label: '帳單', icon: <CalendarClock className="w-5 h-5"/> }, 
                     { id: 'shopping', label: '購物', icon: <ShoppingCart className="w-5 h-5"/> }, 
                     { id: 'notes', label: '記事', icon: <StickyNote className="w-5 h-5"/> }, 
@@ -1158,6 +1305,45 @@ export default function App() {
                   ))}
                 </div>
                 
+                                                     {ui.subTab === 'savings' && (
+ <div className="space-y-4">
+  <div className="flex justify-between items-center mb-6 px-2">
+   <div>
+    <h3 className="text-xl font-black">每月存錢計畫</h3>
+    <p className={`text-xs font-bold ${t.textM} mt-1`}>設定個別帳戶與日期自動提醒</p>
+   </div>
+   <button onClick={() => updateUi({ modal: 'saving' })} className={`px-5 py-2.5 ${t.cardInner} border ${t.border} rounded-full text-sm font-bold shadow-sm active:scale-95 transition-all hover:border-indigo-500/30`}>
+ + 新增計畫
+</button>
+  </div>
+
+  {data.savings.length === 0 ? (
+   <div className={`py-16 text-center text-sm font-bold ${t.textM} ${t.cardInner} rounded-3xl border ${t.border} shadow-sm`}>沒有設定任何存錢計畫</div>
+  ) : data.savings.map(s => (
+   <div key={s.id} className={`p-5 rounded-3xl flex justify-between items-center border ${t.border} ${t.cardInner} shadow-sm transition-all hover:shadow-md ${s.isSaved ? 'opacity-50 grayscale' : ''}`}>
+    <div className="flex gap-4 items-center">
+     <div className={`text-3xl ${t.bg} w-14 h-14 flex justify-center items-center rounded-full shadow-inner`}>{s.icon}</div>
+     <div>
+      <div className="font-bold text-lg">{s.name}</div>
+      <div className={`text-xs font-bold ${t.textM} mt-1`}>
+       {s.isSaved ? '本月已存' : `每月 ${s.dueDate} 號`} · {activeAccounts.find(a=>a.id===s.accountId)?.name || '未指定帳戶'}
+      </div>
+     </div>
+    </div>
+    <div className="flex gap-3 items-center">
+     <span className="font-black text-2xl text-indigo-500 drop-shadow-sm">${s.amount}</span>
+     {/* 🌟 補上 lastSavedMonth 紀錄 */}
+     {!s.isSaved && (
+      <button onClick={() => doAction(() => updateDoc(getDocRef('shared_savings', s.id), {isSaved: true, lastSavedMonth: getLocalYYYYMM(new Date())}), "已標記為存入")} className={`p-2.5 rounded-full ${t.primary} ${t.primaryBtnText} shadow-md active:scale-95 hover:brightness-110 transition-all`}>
+       <Check className="w-5 h-5"/>
+      </button>
+ )}
+              <Trash2 onClick={() => confirmDel('刪除計畫？', () => deleteDoc(getDocRef('shared_savings', s.id)))} className={`w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer transition-colors`}/>
+  </div>
+        </div>
+  ))}
+   </div>
+)} 
                 {ui.subTab === 'bills' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center mb-6 px-2">
@@ -1165,10 +1351,31 @@ export default function App() {
                         <h3 className="text-xl font-black">每月固定帳單</h3>
                         <p className={`text-xs font-bold ${t.textM} mt-1`}>時間到自動提醒繳費</p>
                       </div>
-                      <button onClick={() => updateUi({ modal: 'bill' })} className={`px-5 py-2.5 ${t.cardInner} border ${t.border} rounded-full text-sm font-bold shadow-sm active:scale-95 transition-all hover:border-indigo-500/30`}>
-                        + 新增帳單
-                      </button>
+
+                      {/* 🌟 補回強制重置按鈕 */}
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            confirmAction('確定要將所有已繳帳單與存錢重置為「未繳/未存」嗎？', async () => {
+                              for (const b of data.bills) {
+                                if (b.isPaid) await updateDoc(getDocRef('shared_bills', b.id), { isPaid: false, lastPaidMonth: null });
+                              }
+                              for (const s of data.savings) {
+                                if (s.isSaved) await updateDoc(getDocRef('shared_savings', s.id), { isSaved: false, lastSavedMonth: null });
+                              }
+                            });
+                          }} 
+                          className={`px-3 py-2.5 ${t.cardInner} border border-red-500/30 text-red-500 rounded-full text-xs font-bold shadow-sm active:scale-95 transition-all hover:bg-red-500/10`}
+                        >
+                          重置狀態
+                        </button>
+
+                        <button onClick={() => updateUi({ modal: 'bill' })} className={`px-5 py-2.5 ${t.cardInner} border ${t.border} rounded-full text-sm font-bold shadow-sm active:scale-95 transition-all hover:border-indigo-500/30`}>
+                          + 新增帳單
+                        </button>
+                      </div>
                     </div>
+
 
                     {data.bills.length === 0 ? (
                       <div className={`py-16 text-center text-sm font-bold ${t.textM} ${t.cardInner} rounded-3xl border ${t.border} shadow-sm`}>沒有固定帳單</div>
@@ -1182,14 +1389,27 @@ export default function App() {
                           </div>
                         </div>
                         <div className="flex gap-3 items-center">
-                          <span className="font-black text-2xl drop-shadow-sm">${b.amount}</span>
-                          {!b.isPaid && (
-                            <button onClick={() => doAction(() => updateDoc(getDocRef('shared_bills', b.id), {isPaid: true}), "已繳款")} className={`p-2.5 rounded-full ${t.primary} ${t.primaryBtnText} shadow-md active:scale-95 hover:brightness-110 transition-all`}>
-                              <Check className="w-5 h-5"/>
-                            </button>
-                          )}
-                          <Trash2 onClick={() => confirmDel('刪除帳單？', () => deleteDoc(getDocRef('shared_bills', b.id)))} className={`w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer transition-colors`}/>
-                        </div>
+  <span className="font-black text-2xl drop-shadow-sm">${b.amount}</span>
+
+  {/* 🌟 打勾按鈕 */}
+  {!b.isPaid && (
+    <button onClick={() => handleOneClickPay(b)} className={`p-2.5 rounded-full ${t.primary} ${t.primaryBtnText} shadow-md active:scale-95 hover:brightness-110 transition-all`} title="一鍵入帳並標記已繳">
+      <Check className="w-5 h-5"/>
+    </button>
+  )}
+
+  {/* 🌟 新增：編輯按鈕 (✏️) */}
+  <button 
+    onClick={() => updateUi({ modal: 'bill', selectedItem: b })} 
+    className={`p-2 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}
+    title="修改帳單"
+  >
+    <Edit3 className="w-4 h-4"/>
+  </button>
+
+  {/* 刪除按鈕 */}
+  <Trash2 onClick={() => confirmDel('刪除帳單？', () => deleteDoc(getDocRef('shared_bills', b.id)))} className={`w-5 h-5 ${t.textM} hover:text-red-500 cursor-pointer transition-colors`}/>
+</div>
                       </div>
                     ))}
                   </div>
@@ -1320,8 +1540,10 @@ export default function App() {
           {/* ================= 浮動導覽列 (升級磨砂玻璃質感) ================= */}
           <div className="fixed bottom-0 left-0 right-0 z-40 flex justify-center pointer-events-none">
             <div className="w-full max-w-md md:max-w-xl relative pointer-events-auto">
-              <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-50">
-                <button onClick={() => handleOpenTx(null)} className={`h-[72px] w-[72px] ${t.primary} ${t.primaryBtnText} rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-transform border-[6px] ${ui.isDark ? 'border-[#161925]' : 'border-[#FDFBF7]'} hover:brightness-110`}>
+              <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-50 group">
+                <div className={`absolute inset-1 rounded-full ${t.primary} opacity-40 animate-ping group-hover:animate-none duration-1000`}></div>
+                
+                <button onClick={() => handleOpenTx(null)} className={`relative h-[72px] w-[72px] ${t.primary} ${t.primaryBtnText} rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(0,0,0,0.2)] active:scale-95 transition-all border-[6px] ${ui.isDark ? 'border-[#161925]' : 'border-[#FDFBF7]'} hover:scale-105 hover:brightness-110`}>
                   <Plus className="w-8 h-8" strokeWidth={3} />
                 </button>
               </div>
@@ -1363,7 +1585,8 @@ export default function App() {
                     {ui.modal === 'notify' && <Bell className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'categories' && <List className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'trash' && <ArchiveRestore className={`w-6 h-6 ${t.textM}`}/>}
-                    {ui.modal === 'tx' ? (ui.selectedTx ? '修改紀錄' : '新增紀錄') : ui.modal === 'settings' ? '設定與管理' : ui.modal === 'barcode' ? '發票載具' : ui.modal === 'notify' ? '推播與通知' : ui.modal === 'categories' ? '自訂分類管理' : ui.modal === 'trash' ? '垃圾桶與還原' : '選單'}
+                    {ui.modal === 'saving' && <Coins className={`w-6 h-6 ${t.textM}`}/>}
+                    {ui.modal === 'tx' ? (ui.selectedTx ? '修改紀錄' : '新增紀錄') : ui.modal === 'saving' ? '新增存錢計畫' : ui.modal === 'settings' ? '設定與管理' : ui.modal === 'barcode' ? '發票載具' : ui.modal === 'notify' ? '推播與通知' : ui.modal === 'categories' ? '自訂分類管理' : ui.modal === 'trash' ? '垃圾桶與還原' : '選單'}
                   </h3>
                   <button onClick={() => updateUi({ modal: null, selectedTx: null })} className={`p-2.5 ${t.bg} rounded-full active:scale-95 transition-colors hover:text-rose-500`}>
                     <X className={`w-6 h-6 ${t.textM}`}/>
@@ -1380,7 +1603,7 @@ export default function App() {
                       onDeleteTemplate={(id) => confirmDel('確定要刪除範本嗎？', () => deleteDoc(getDocRef('shared_templates', id)))}
                       onSave={handleTxSave}
                       onDeleteTx={(id) => confirmDel('確定要刪除這筆紀錄嗎？ (將移至垃圾桶保留 15 天)', () => updateDoc(getDocRef('shared_ledger', id), {isDeleted: true, deletedAt: serverTimestamp()}))} 
-                      t={t} ui={ui}
+                      t={t} ui={ui} mTx={mTx}
                     />
                   )}
 
@@ -1470,14 +1693,14 @@ export default function App() {
                               <h4 className="font-extrabold text-lg mb-1">{a.title}</h4>
                               <p className={`text-sm font-bold ${t.textM}`}>{a.desc}</p>
                               {/* 🌟 一鍵入帳按鈕 (固定帳單) */}
-                              {a.action === 'pay_bill' && a.bill && (
-                                <button 
-                                  onClick={() => handleOneClickPay(a.bill)} 
-                                  className="mt-3 w-full py-2 bg-emerald-500/10 text-emerald-500 rounded-xl font-bold hover:bg-emerald-500/20 active:scale-95 transition-all text-sm flex items-center justify-center gap-1.5 border border-emerald-500/20"
-                                >
-                                  💸 一鍵入帳並標記已繳
-                                </button>
-                              )}
+                              {a.action === 'do_saving' && a.saving && (
+      <button 
+        onClick={() => handleOneClickSaving(a.saving)} 
+        className="mt-3 w-full py-2 bg-indigo-500/10 text-indigo-500 rounded-xl font-bold hover:bg-indigo-500/20 active:scale-95 transition-all text-sm flex items-center justify-center gap-1.5 border border-indigo-500/20"
+      >
+        💰 一鍵執行並標記已存
+      </button>
+    )}
                             </div>
                             <button 
                               onClick={() => setDismissedAlerts(prev => [...prev, a.id])} 
@@ -1490,11 +1713,39 @@ export default function App() {
                       </div>
                     )}
                     {ui.modal === 'account' && (
-                      <AccForm onSave={d => doAction(() => addDoc(getCol('shared_accounts'), {...d, createdAt: serverTimestamp(), isArchived: false}), '帳戶建立')} t={t} />
-                    )}
+  <AccForm 
+    initialData={ui.selectedItem} 
+    onSave={d => {
+      const { id, ...payload } = d;
+      if (id) {
+        doAction(() => updateDoc(getDocRef('shared_accounts', id), payload), '帳戶已修改');
+      } else {
+        doAction(() => addDoc(getCol('shared_accounts'), { ...payload, createdAt: serverTimestamp(), isArchived: false }), '帳戶已建立');
+      }
+    }} 
+    t={t} 
+  />
+)}
                     {ui.modal === 'bill' && (
-                      <BillForm onSave={d => doAction(() => addDoc(getCol('shared_bills'), {...d, isPaid: false, createdAt: serverTimestamp()}), '帳單建立')} t={t} />
-                    )}
+  <BillForm 
+    accounts={activeAccounts} 
+    initialData={ui.selectedItem} 
+    onSave={d => {
+      const { id, ...payload } = d;
+      if (id) {
+        // 如果有 ID 代表是修改現有帳單
+        doAction(() => updateDoc(getDocRef('shared_bills', id), payload), '帳單已修改');
+      } else {
+        // 沒有 ID 代表是新增
+        doAction(() => addDoc(getCol('shared_bills'), {...payload, isPaid: false, createdAt: serverTimestamp()}), '帳單建立');
+      }
+    }} 
+    t={t} 
+  />
+)}
+                    {ui.modal === 'saving' && (
+  <SavingForm accounts={activeAccounts} onSave={d => doAction(() => addDoc(getCol('shared_savings'), {...d, isSaved: false, createdAt: serverTimestamp()}), '存錢計畫建立')} t={t} />
+)}
                     {ui.modal === 'note' && (
                       <NoteForm 
                         data={ui.selectedItem} 
@@ -1586,7 +1837,7 @@ export default function App() {
 // ==========================================
 
 // 🌟 記帳表單 (旗艦升級：多幣別選擇 + 彈性比例拆帳 + 沉浸無縫計算機 + 優化標籤與相機)
-const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, onDeleteTx, t, ui }) => {
+const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, onAddTag, onSaveTemplate, onDeleteTemplate, onSave, onDeleteTx, t, ui, mTx }) => {
   const [data, setData] = useState({ 
     id: initialData?.id || null, 
     type: initialData?.type || 'expense', 
@@ -1663,20 +1914,88 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
     else setData({...data, amount: data.amount + k});
   };
 
-  const submit = () => { 
-    let finalAmount = currentTotalAmount;
-    
-    // 🌟 防呆：金額不得為 0 或不合法
-    if (!finalAmount || finalAmount <= 0 || isNaN(finalAmount)) {
-       alert("請輸入有效金額！"); // 此處可改用 showToast 但因層級問題使用原生 alert 或改以紅色字體提示，為保持極致體驗已改為下方攔截。
-       // Note: To match exact requirement of showing red toast, we use standard error throwing logic caught by parent, 
-       // but here we just return early. A toast requires passing `showToast` down or using contexts. 
-       // For directness, let's use an alert that matches the UI or just return.
-       alert("請點擊下方金額區塊輸入有效數字！");
-       setShowK(true);
-       return;
-    }
+const submit = () => { 
+  let finalAmount = currentTotalAmount;
+  
+  if (!finalAmount || finalAmount <= 0 || isNaN(finalAmount)) {
+     alert("請點擊下方金額區塊輸入有效數字！");
+     setShowK(true);
+     return;
+  }
 
+  // -------------------------------------------------------------
+  // 🌟 記帳時的額度超限檢查
+  // -------------------------------------------------------------
+  if (data.type === 'expense') {
+    const selectedAccount = accounts.find(a => a.id === data.accountId);
+    if (selectedAccount) {
+      const { singleLimit, monthlyLimit, name } = selectedAccount;
+
+      // 1. 單筆超限警示
+      if (singleLimit > 0 && finalAmount > singleLimit) {
+        const confirmSingle = window.confirm(
+          `⚠️ 額度警示：這筆金額 ($${finalAmount.toLocaleString()}) 超過「${name}」設定的單筆上限 ($${singleLimit.toLocaleString()})！\n\n確定仍要記這筆帳嗎？`
+        );
+        if (!confirmSingle) return; // 按取消就停止記帳
+      }
+
+      // 2. 每月總額超限警示
+      if (monthlyLimit > 0) {
+        // 從 ui.mTx 算出這個帳戶本月已經花了多少錢（排除目前正在編輯的這筆帳，避免重複計算）
+        const currentAccMonthlyExp = ui.mTx
+          ? ui.mTx
+              .filter(t => t.accountId === selectedAccount.id && t.type === 'expense' && t.id !== data.id)
+              .reduce((sum, t) => sum + t.amount, 0)
+          : 0;
+
+        const projectedTotal = currentAccMonthlyExp + finalAmount;
+
+        if (projectedTotal > monthlyLimit) {
+          const confirmMonthly = window.confirm(
+            `⚠️ 額度警示：「${name}」本月累積消費將達 $${projectedTotal.toLocaleString()}，超過設定的每月上限 ($${monthlyLimit.toLocaleString()})！\n\n確定仍要記這筆帳嗎？`
+          );
+          if (!confirmMonthly) return; // 按取消就停止記帳
+        }
+      }
+    }
+  }
+// -------------------------------------------------------------
+    // 🌟 核心新增：帳戶額度提醒檢查邏輯 (單筆、每月總額)
+    // -------------------------------------------------------------
+    if (data.type === 'expense') {
+      const selectedAccount = accounts.find(a => a.id === data.accountId);
+      if (selectedAccount) {
+        const { singleLimit, monthlyLimit, name } = selectedAccount;
+  
+        // 1. 檢查單筆上限
+        if (singleLimit > 0 && finalAmount > singleLimit) {
+          const confirmSingle = window.confirm(
+            `⚠️ 額度警示：這筆金額 ($${finalAmount.toLocaleString()}) 超過「${name}」設定的單筆上限 ($${singleLimit.toLocaleString()})！\n\n確定仍要記這筆帳嗎？`
+          );
+          if (!confirmSingle) return;
+        }
+  
+        // 2. 檢查每月總額累積上限
+        if (monthlyLimit > 0) {
+          const currentAccMonthlyExp = mTx
+            ? mTx
+                .filter(t => t.accountId === selectedAccount.id && t.type === 'expense' && t.id !== data.id)
+                .reduce((sum, t) => sum + t.amount, 0)
+            : 0;
+  
+          const projectedTotal = currentAccMonthlyExp + finalAmount;
+  
+          if (projectedTotal > monthlyLimit) {
+            const confirmMonthly = window.confirm(
+              `⚠️ 額度警示：「${name}」本月累積消費將達 $${projectedTotal.toLocaleString()}，超過設定的每月上限 ($${monthlyLimit.toLocaleString()})！\n\n確定仍要記這筆帳嗎？`
+            );
+            if (!confirmMonthly) return;
+          }
+        }
+      } 
+    }
+    // -------------------------------------------------------------
+  
     if (settings.travelMode && currency !== 'TWD' && finalAmount > 0) {
       const c = safeTravelCurrencies.find(x => x.code === currency);
       if (c) {
@@ -1686,7 +2005,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
         data.note = `[${cName} ${c.code} ${amtStr}] ${data.note}`.trim();
       }
     }
-
+  
     if (finalAmount > 0) {
       const acc = accounts.find(a => a.id === data.accountId);
       const autoPayer = acc ? acc.type : 'joint'; 
@@ -1695,7 +2014,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
       let finalSplitMode = splitType;
       let finalSplitRatio = null;
       let finalSplitExact = null;
-
+  
       if (splitBill) {
           if (splitType === 'amount') {
               const hAmt = Number(splitExactH) || 0;
@@ -2550,34 +2869,8 @@ const BarcodeForm = ({ codes, onSave, t }) => {
   const [w, setW] = useState(codes.w || ''); 
   const [mode, setMode] = useState('view'); 
 
-  useEffect(() => {
-    const handlePopState = (event) => {
-      // 邏輯：偵測到滑動返回時，檢查是否有視窗開啟，有的話就優先關閉視窗
-      if (showPOS) {
-        setShowPOS(false);
-      } else if (showHistoryModal) {
-        setShowHistoryModal(null);
-      } else if (showRebookModal) {
-        setShowRebookModal(false);
-      } else if (editingAppt) {
-        setEditingAppt(null);
-      } else if (editingRevenue) {
-        setEditingRevenue(null);
-      } else {
-        // 如果沒有視窗開著，才允許滑動離開頁面（或是你也可以選擇什麼都不做，直接擋住）
-        return; 
-      }
-      
-      // 關鍵：這行是為了讓歷史紀錄保持在系統認為「我還在 App 裡」的狀態
-      window.history.pushState(null, '', window.location.href);
-    };
+  // 🗑️ 已經將原本這裡那一大段 useEffect (包含 showPOS, showHistoryModal...) 刪除了！
 
-    // 初始化時先塞入一個紀錄
-    window.history.pushState(null, '', window.location.href);
-    window.addEventListener('popstate', handlePopState);
-    
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [showPOS, showHistoryModal, showRebookModal, editingAppt, editingRevenue]);
   return (
     <div className="space-y-5 pb-8 pt-4">
       <div className={`flex ${t.bg} p-1.5 rounded-2xl shadow-sm`}>
@@ -2683,12 +2976,16 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, t }) => {
   );
 };
 
-const AccForm = ({ onSave, t }) => {
-  const [n, setN] = useState(''); 
-  const [i, setI] = useState('🏦');
+const AccForm = ({ onSave, initialData, t }) => {
+  const [n, setN] = useState(initialData?.name || ''); 
+  const [i, setI] = useState(initialData?.icon || '🏦');
+  // 🌟 新增狀態：如果本來有限額就載入，沒有就預設空白
+  const [singleLimit, setSingleLimit] = useState(initialData?.singleLimit || '');
+  const [monthlyLimit, setMonthlyLimit] = useState(initialData?.monthlyLimit || '');
   
   return (
     <div className="space-y-6 pb-8 pt-4">
+      {/* 帳戶名稱 */}
       <div className="space-y-2">
         <label className={`text-xs font-bold ${t.textM} px-2`}>帳戶名稱</label>
         <input 
@@ -2698,12 +2995,40 @@ const AccForm = ({ onSave, t }) => {
           className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring} shadow-inner transition-all`} 
         />
       </div>
+
+      {/* 🌟 額度上限輸入區 */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className={`text-xs font-bold ${t.textM} px-2`}>單筆消費上限 ($)</label>
+          <input 
+            type="number"
+            value={singleLimit} 
+            onChange={e => setSingleLimit(e.target.value)} 
+            placeholder="不限制" 
+            className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring} shadow-inner transition-all`} 
+          />
+        </div>
+        
+        <div className="space-y-2">
+          <label className={`text-xs font-bold ${t.textM} px-2`}>每月累積上限 ($)</label>
+          <input 
+            type="number"
+            value={monthlyLimit} 
+            onChange={e => setMonthlyLimit(e.target.value)} 
+            placeholder="不限制" 
+            className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring} shadow-inner transition-all`} 
+          />
+        </div>
+      </div>
+
+      {/* 帳戶圖示選擇器 */}
       <div className="space-y-2">
         <label className={`text-xs font-bold ${t.textM} px-2`}>帳戶圖示</label>
         <div className="flex gap-2 text-3xl overflow-x-auto py-2 hide-scrollbar">
           {['🏦','💳','💼','💎', '🐖', '🪙', '📈', '🏠'].map(x => (
             <button 
               key={x} 
+              type="button"
               onClick={() => setI(x)} 
               className={`p-4 border rounded-2xl shrink-0 transition-all ${i === x ? `${t.primaryText} ${t.bg} border-transparent shadow-md scale-105` : `${t.border} ${t.cardInner} hover:bg-stone-50 dark:hover:bg-slate-800`}`}
             >
@@ -2712,22 +3037,47 @@ const AccForm = ({ onSave, t }) => {
           ))}
         </div>
       </div>
+
+      {/* 儲存按鈕：把輸入的數字傳出去 */}
       <button 
-        onClick={() => onSave({name:n, type:'joint', icon:i, balance:0})} 
+        type="button"
+        onClick={() => onSave({
+          id: initialData?.id,
+          name: n, 
+          type: initialData?.type || 'joint', 
+          icon: i, 
+          balance: initialData?.balance || 0,
+          singleLimit: singleLimit !== '' ? Number(singleLimit) : 0,
+          monthlyLimit: monthlyLimit !== '' ? Number(monthlyLimit) : 0
+        })} 
         disabled={!n} 
         className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all hover:brightness-110`}
       >
-        建立帳戶
+        {initialData ? '儲存修改' : '建立帳戶'}
       </button>
     </div>
   );
 };
 
-const BillForm = ({ onSave, t }) => {
-  const [n, setN] = useState(''); 
-  const [a, setA] = useState(''); 
-  const [d, setD] = useState(1);
-  
+// 🌟 支援新增與修改的帳單表單
+const BillForm = ({ accounts, onSave, initialData, t }) => {
+  const [n, setN] = useState(initialData?.name || ''); 
+  const [a, setA] = useState(initialData ? String(initialData.amount) : ''); 
+  const [d, setD] = useState(initialData?.dueDate || 1);
+  const [accIds, setAccIds] = useState(
+    initialData?.accountIds && initialData.accountIds.length > 0 
+      ? initialData.accountIds 
+      : (accounts && accounts.length > 0 ? [accounts[0].id] : [])
+  );
+
+  const toggleAcc = (id) => {
+    if (accIds.includes(id)) {
+      if (accIds.length > 1) setAccIds(accIds.filter(x => x !== id));
+    } else {
+      setAccIds([...accIds, id]);
+    }
+  };
+
   return (
     <div className="space-y-5 pb-8 pt-4">
       <div className="space-y-2">
@@ -2736,9 +3086,26 @@ const BillForm = ({ onSave, t }) => {
            value={n} 
            onChange={e => setN(e.target.value)} 
            placeholder="例如: 手機費" 
-           className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} shadow-inner outline-none focus:ring-2 ${t.ring} transition-all`} 
+           className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring} shadow-inner transition-all`} 
          />
       </div>
+
+      <div className="space-y-2">
+         <label className={`text-xs font-bold ${t.textM} px-2`}>扣款帳戶 (可複選平分)</label>
+         <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1 shadow-inner`}>
+           {accounts.map(acc => (
+             <button
+               key={acc.id}
+               type="button"
+               onClick={() => toggleAcc(acc.id)}
+               className={`shrink-0 px-5 py-3 font-bold text-sm rounded-xl transition-all ${accIds.includes(acc.id) ? `${t.cardInner} shadow-md text-indigo-500` : t.textM}`}
+             >
+               {acc.name}
+             </button>
+           ))}
+         </div>
+      </div>
+
       <div className="flex gap-4">
         <div className="flex-1 space-y-2">
           <label className={`text-xs font-bold ${t.textM} px-2`}>金額</label>
@@ -2762,12 +3129,97 @@ const BillForm = ({ onSave, t }) => {
           />
         </div>
       </div>
+
       <button 
-        onClick={() => onSave({name:n, amount:Number(a), dueDate:Number(d), icon:'🧾'})} 
-        disabled={!n || !a} 
+        type="button"
+        onClick={() => onSave({
+          id: initialData?.id,
+          name: n, 
+          amount: Number(a), 
+          dueDate: Number(d), 
+          accountIds: accIds, 
+          icon: initialData?.icon || '🧾'
+        })} 
+        disabled={!n || !a || accIds.length === 0} 
         className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all hover:brightness-110`}
       >
-        建立帳單
+        {initialData ? '儲存修改' : '建立帳單'}
+      </button>
+    </div>
+  );
+};
+// 🌟 存錢計畫表單 (美化升級版)
+const SavingForm = ({ accounts, onSave, t }) => {
+  const [n, setN] = useState(''); 
+  const [a, setA] = useState(''); 
+  const [d, setD] = useState(1);
+  const [accId, setAccId] = useState(accounts[0]?.id || '');
+  const [i, setI] = useState('💰'); // 🌟 新增圖示狀態
+
+  return (
+    <div className="space-y-6 pb-8 pt-4">
+      {/* 計畫名稱 */}
+      <div className="space-y-2">
+         <label className={`text-xs font-bold ${t.textM} px-2`}>存錢計畫名稱</label>
+         <input 
+           value={n} onChange={e => setN(e.target.value)} placeholder="例如: 買房基金、台股定存" 
+           className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} shadow-inner outline-none focus:ring-2 ${t.ring} transition-all`} 
+         />
+      </div>
+
+      {/* 🌟 新增：圖示選擇器 */}
+      <div className="space-y-2">
+        <label className={`text-xs font-bold ${t.textM} px-2`}>代表圖示</label>
+        <div className="flex gap-2 text-3xl overflow-x-auto py-2 hide-scrollbar">
+          {['💰', '🐷', '🏠', '🚗', '✈️', '📈', '💍', '🎓'].map(x => (
+            <button 
+              key={x} 
+              type="button"
+              onClick={() => setI(x)} 
+              className={`p-4 border rounded-2xl shrink-0 transition-all ${i === x ? `${t.primaryText} ${t.bg} border-transparent shadow-md scale-105` : `${t.border} ${t.cardInner} hover:bg-stone-50 dark:hover:bg-slate-800`}`}
+            >
+              {x}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 帳戶選擇 */}
+      <div className="space-y-2">
+         <label className={`text-xs font-bold ${t.textM} px-2`}>存入目標帳戶</label>
+         <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.bg} overflow-x-auto hide-scrollbar gap-1 shadow-inner`}>
+           {accounts.map(acc => (
+             <button
+               key={acc.id} 
+               type="button"
+               onClick={() => setAccId(acc.id)}
+               className={`shrink-0 px-5 py-3 font-bold text-sm rounded-xl transition-all ${accId === acc.id ? `${t.cardInner} shadow-md text-indigo-500` : t.textM}`}
+             >
+               {acc.name}
+             </button>
+           ))}
+         </div>
+      </div>
+
+      {/* 金額與日期改為並排 Grid 佈局，更節省空間 */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className={`text-xs font-bold ${t.textM} px-2`}>每月金額 ($)</label>
+          <input type="number" value={a} onChange={e => setA(e.target.value)} placeholder="0" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} shadow-inner outline-none focus:ring-2 ${t.ring} transition-all`} />
+        </div>
+        <div className="space-y-2">
+          <label className={`text-xs font-bold ${t.textM} px-2`}>每月幾號存？</label>
+          <input type="number" min="1" max="31" value={d} onChange={e => setD(e.target.value)} className={`w-full p-4 rounded-xl font-bold text-base text-center ${t.bg} border ${t.border} shadow-inner outline-none focus:ring-2 ${t.ring} transition-all`} />
+        </div>
+      </div>
+
+      <button 
+        type="button"
+        onClick={() => onSave({name: n, amount: Number(a), dueDate: Number(d), accountId: accId, icon: i})} 
+        disabled={!n || !a || !accId} 
+        className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white shadow-lg bg-indigo-500 disabled:opacity-50 mt-4 active:scale-95 transition-all hover:bg-indigo-600`}
+      >
+        建立存錢計畫
       </button>
     </div>
   );
