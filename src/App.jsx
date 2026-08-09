@@ -889,12 +889,53 @@ export default function App() {
               <div className="space-y-6 animate-in fade-in duration-300">
                 
                 {/* 🌟 活動帳戶篩選器 */}
-                <div className={`flex p-1.5 rounded-2xl border ${t.border} ${t.cardInner} overflow-x-auto hide-scrollbar gap-1 shadow-sm`}>
-                   <button onClick={() => updateUi({ filterAccount: 'all' })} className={`shrink-0 px-5 py-2.5 font-bold text-sm rounded-xl transition-all ${(!ui.filterAccount || ui.filterAccount === 'all') ? `${t.bg} shadow-md ${t.primaryText}` : t.textM}`}>全部帳戶</button>
-                   {activeAccounts.map(a => (
-                      <button key={a.id} onClick={() => updateUi({ filterAccount: a.id })} className={`shrink-0 px-5 py-2.5 font-bold text-sm rounded-xl transition-all ${ui.filterAccount === a.id ? `${t.bg} shadow-md ${t.primaryText}` : t.textM}`}>{a.name}</button>
-                   ))}
-                </div>
+                {activeAccounts.map(a => (
+                        <div key={a.id} className={`p-5 rounded-3xl ${t.cardInner} shadow-sm border ${t.border} relative flex flex-col justify-between hover:shadow-md transition-all`}>
+                          {/* 🌟 上半部：圖示與帳戶名稱 */}
+                          <div>
+                            <div className="text-4xl drop-shadow-sm mb-2">{a.icon}</div>
+                            <span className="font-bold text-lg truncate block leading-tight">{a.name}</span>
+                            
+                            {/* 限額數字改為換行顯示，避免太長 */}
+                            {(a.singleLimit > 0 || a.monthlyLimit > 0) && (
+                              <div className={`text-[10px] font-bold ${t.textM} mt-1 leading-tight`}>
+                                {a.singleLimit > 0 && <div>單筆 ${a.singleLimit.toLocaleString()}</div>}
+                                {a.monthlyLimit > 0 && <div>每月 ${a.monthlyLimit.toLocaleString()}</div>}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* 🌟 中間：總金額 */}
+                          <div className="text-2xl sm:text-3xl font-black drop-shadow-sm my-4 truncate">
+                            ${(accBal[a.id] || 0).toLocaleString()}
+                          </div>
+                          
+                          {/* 🌟 下半部：操作按鈕區 (獨立一排才不會擠) */}
+                          <div className={`flex items-center justify-end gap-2 pt-3 border-t border-dashed ${ui.isDark ? 'border-stone-700' : 'border-stone-200'}`}>
+                            <button 
+                              onClick={() => updateUi({ modal: 'account', selectedItem: a })} 
+                              className={`p-2 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}
+                              title="修改帳戶設定"
+                            >
+                              <Edit3 className="w-4 h-4"/>
+                            </button>
+                            <button 
+                              onClick={() => confirmAction('確定要封存此帳戶嗎？', () => updateDoc(getDocRef('shared_accounts', a.id), {isArchived: true}))} 
+                              className={`p-2 rounded-full ${t.bg} ${t.textM} hover:${t.primaryText} transition-colors shadow-sm`}
+                              title="封存帳戶"
+                            >
+                              <Archive className="w-4 h-4"/>
+                            </button>
+                            <button 
+                              onClick={() => confirmDel('危險操作：確定要刪除帳戶嗎？', () => deleteDoc(getDocRef('shared_accounts', a.id)))} 
+                              className={`p-2 rounded-full ${t.bg} ${t.textM} hover:text-red-500 transition-colors shadow-sm`}
+                              title="刪除帳戶"
+                            >
+                              <Trash2 className="w-4 h-4"/>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
 
                 <section className={`${t.cardInner} rounded-[2.5rem] p-7 shadow-xl border ${t.border} relative overflow-hidden transition-all duration-500 hover:shadow-2xl hover:-translate-y-1`}>
                   {/* 🌟 升級版動態流光光暈 */}
@@ -1586,7 +1627,14 @@ export default function App() {
                     {ui.modal === 'categories' && <List className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'trash' && <ArchiveRestore className={`w-6 h-6 ${t.textM}`}/>}
                     {ui.modal === 'saving' && <Coins className={`w-6 h-6 ${t.textM}`}/>}
-                    {ui.modal === 'tx' ? (ui.selectedTx ? '修改紀錄' : '新增紀錄') : ui.modal === 'saving' ? '新增存錢計畫' : ui.modal === 'settings' ? '設定與管理' : ui.modal === 'barcode' ? '發票載具' : ui.modal === 'notify' ? '推播與通知' : ui.modal === 'categories' ? '自訂分類管理' : ui.modal === 'trash' ? '垃圾桶與還原' : '選單'}
+                    {ui.modal === 'tx' ? (ui.selectedTx ? '修改紀錄' : '新增紀錄') : 
+                     ui.modal === 'saving' ? '新增存錢計畫' : 
+                     ui.modal === 'bill' ? (ui.selectedItem ? '修改固定帳單' : '新增固定帳單') : 
+                     ui.modal === 'settings' ? '設定與管理' : 
+                     ui.modal === 'barcode' ? '發票載具' : 
+                     ui.modal === 'notify' ? '推播與通知' : 
+                     ui.modal === 'categories' ? '自訂分類管理' : 
+                     ui.modal === 'trash' ? '垃圾桶與還原' : '選單'}
                   </h3>
                   <button onClick={() => updateUi({ modal: null, selectedTx: null })} className={`p-2.5 ${t.bg} rounded-full active:scale-95 transition-colors hover:text-rose-500`}>
                     <X className={`w-6 h-6 ${t.textM}`}/>
