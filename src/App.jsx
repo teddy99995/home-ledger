@@ -1018,6 +1018,11 @@ export default function App() {
                             <p className="font-extrabold text-lg truncate">{tx.type === 'transfer' ? '轉帳' : tx.category}</p>
                           </div>
                           <div className="flex gap-1.5 flex-wrap items-center">
+                            {tx.recordTime && (
+      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${t.bg} border ${t.border} ${t.textM}`}>
+        {tx.recordTime}
+      </span>
+    )}
                             {tx.note && <span className={`text-[11px] font-bold ${t.textM} truncate max-w-[100px]`}>{tx.note}</span>}
                             {tx.tags?.map(tg => <span key={tg} className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold bg-[#E3B59B]/10 ${t.primaryText}`}>#{tg}</span>)}
                           </div>
