@@ -206,31 +206,38 @@ export default function App() {
   // 🌟 PWA App 自動檢查新版本並靜默更新機制
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      // 1. 監聽系統底層，當新版本接管時自動重新載入網頁
+      // 1. 監聽系統底層，當新版本接管時自動重新載入網頁以套用新版
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         window.location.reload();
       });
 
-      // 2. 靜默檢查更新函數
+      // 2. 靜默檢查更新函數 (優化為 getRegistration，反應更即時)
       const checkUpdate = async () => {
         try {
-          const reg = await navigator.serviceWorker.ready;
-          if (reg) await reg.update();
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg) {
+            await reg.update();
+          }
         } catch (e) {
           console.warn("自動更新檢查失敗:", e);
         }
       };
 
-      // 3. 當使用者把 App 切換回前景時，立刻檢查是否有新版
-      document.addEventListener('visibilitychange', () => {
+      // 🌟 核心新增：點開 App (初次載入組件) 的當下，立刻強制檢查一次！
+      checkUpdate();
+
+      // 3. 當使用者把 App 切換回前景 (從背景喚醒) 時，立刻檢查
+      const handleVisibilityChange = () => {
         if (document.visibilityState === 'visible') checkUpdate();
-      });
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
       
-      // 4. 背景常駐：每 1 小時定時檢查一次
+      // 4. 背景常駐：每 1 小時定時檢查一次 (防呆機制)
       const interval = setInterval(checkUpdate, 60 * 60 * 1000);
+      
       return () => {
         clearInterval(interval);
-        document.removeEventListener('visibilitychange', checkUpdate);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
   }, []);
