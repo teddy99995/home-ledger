@@ -173,7 +173,7 @@ export default function App() {
     const savedIsDark = localStorage.getItem('homeLedgerTheme') === 'dark';
     return {
       date: new Date(), dateRange: { start: '', end: '' },
-      tab: 'home', subTab: 'bills', statsView: 'month', chartView: 'expense', modal: null, search: '', filterTags: [], filterAccount: 'all',
+      tab: 'home', subTab: 'bills', statsView: 'month', chartView: 'expense', modal: null, search: '', filterTags: [], filterAccount: localStorage.getItem('homeLedgerDefaultAccount') || 'all',
       isDark: savedIsDark, confirm: null, selectedItem: null, toast: null, selectedTx: null, isManageTags: false, filterStartDate: '', filterEndDate: '', filterCurrency: 'all'
     };
   });
@@ -193,6 +193,10 @@ export default function App() {
       const next = { ...prev, ...updates };
       if (updates.hasOwnProperty('isDark')) {
         localStorage.setItem('homeLedgerTheme', updates.isDark ? 'dark' : 'light');
+      }
+      // 👇 自動記住這台手機最後選的帳戶
+      if (updates.hasOwnProperty('filterAccount')) {
+        localStorage.setItem('homeLedgerDefaultAccount', updates.filterAccount);
       }
       return next;
     });
