@@ -209,9 +209,16 @@ export default function App() {
 
   // 🌟 PWA App 自動檢查新版本並靜默更新機制
   useEffect(() => {
+    // 👇 新增：開機時檢查是不是剛抓完新版，是的話就跳通知！
+    if (localStorage.getItem('app_updated_flag')) {
+      setTimeout(() => showToast("🎉 系統已成功更新至最新版本！"), 800);
+      localStorage.removeItem('app_updated_flag');
+    }
+
     if ('serviceWorker' in navigator) {
       // 1. 監聽系統底層，當新版本接管時自動重新載入網頁以套用新版
       navigator.serviceWorker.addEventListener('controllerchange', () => {
+        localStorage.setItem('app_updated_flag', 'true'); // 👈 新增：重載前先在手機裡做個記號
         window.location.reload();
       });
 
