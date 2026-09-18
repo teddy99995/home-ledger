@@ -1007,6 +1007,24 @@ export default function App() {
                      </button>
                   </div>
 
+                  {/* 🌟 總收入與總支出 (加回來方便對帳！) */}
+                  <div className="grid grid-cols-2 gap-4 mb-4 relative z-10">
+                      <div className={`p-5 rounded-[2rem] border ${t.border}${t.bg} shadow-sm bg-gradient-to-br from-emerald-500/5 to-transparent`}>
+                          <p className={`text-xs font-bold ${t.textM} mb-1 flex items-center gap-1.5`}><TrendingUp className="w-4 h-4 text-emerald-500"/>總收入</p>
+                          <h2 className="text-2xl sm:text-3xl font-black text-emerald-500 drop-shadow-sm">${hStats.inc.toLocaleString()}</h2>
+                      </div>
+                      <div className={`p-5 rounded-[2rem] border ${t.border}${t.bg} shadow-sm bg-gradient-to-br from-rose-500/5 to-transparent`}>
+                          <p className={`text-xs font-bold ${t.textM} mb-1 flex items-center gap-1.5`}><TrendingDown className="w-4 h-4 text-rose-500"/>總支出</p>
+                          <h2 className="text-2xl sm:text-3xl font-black text-rose-500 drop-shadow-sm">${hStats.exp.toLocaleString()}</h2>
+                      </div>
+                  </div>
+                  <div className="flex items-baseline gap-3 mb-6 px-2 relative z-10">
+                    <span className={`text-sm font-bold ${t.textM}`}>實際結餘</span>
+                    <h2 className={`text-[3.5rem] leading-none font-black tracking-tighter drop-shadow-sm ${hStats.inc - hStats.exp >= 0 ? t.text : 'text-rose-500'}`}>
+                      ${(hStats.inc - hStats.exp).toLocaleString()}
+                    </h2>
+                  </div>
+
                   {/* 🌟 步驟一與四：預算分配與彈性調整面板 */}
                   <div className={`p-6 rounded-[2rem] border ${t.border} ${t.cardInner} shadow-sm relative overflow-hidden`}>
                      <h3 className="font-extrabold text-sm mb-5 flex items-center gap-2 tracking-wider"><PieChartIcon className="w-4 h-4 text-indigo-500"/> 四步驟：預算分配</h3>
@@ -1450,13 +1468,33 @@ export default function App() {
 
                   <div className={`w-full relative z-10 rounded-[1.5rem] border ${t.border} ${t.cardInner} shadow-sm flex flex-col overflow-hidden mt-4`}>
                     {chartData.length === 0 ? <div className={`text-center text-sm font-bold ${t.textM} py-8`}>目前沒有資料</div> : chartData.map((item, idx, arr) => (
-                      <div key={idx} className={`flex justify-between items-center p-4 ${idx !== arr.length - 1 ? `border-b ${t.border}` : ''} hover:bg-black/5 dark:hover:bg-white/5 transition-colors`}>
-                        <div className="flex gap-3 font-bold text-sm items-center"><span className="text-xl drop-shadow-sm">{item.icon}</span> {item.name}</div>
-                        <div className="font-black text-base">{item.percentage}%</div>
-                      </div>
+                      <React.Fragment key={idx}>
+                        {/* 分類標題 (加入點擊展開功能) */}
+                        <div onClick={() => updateUi({ expandedCat: ui.expandedCat === item.name ? null : item.name })} className={`flex justify-between items-center p-4 cursor-pointer ${idx !== arr.length - 1 && ui.expandedCat !== item.name ? `border-b ${t.border}` : ''} hover:bg-black/5 dark:hover:bg-white/5 transition-colors`}>
+                          <div className="flex gap-3 font-bold text-sm items-center">
+                             <span className="text-xl drop-shadow-sm">{item.icon}</span> {item.name} 
+                             <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${ui.expandedCat === item.name ? 'rotate-180' : ''}`}/>
+                          </div>
+                          <div className="font-black text-base">${item.value.toLocaleString()} <span className={`text-xs font-bold ${t.textM} ml-1`}>({item.percentage}%)</span></div>
+                        </div>
+                        
+                        {/* 展開後的明細列表 */}
+                        {ui.expandedCat === item.name && (
+                           <div className={`px-4 pb-4 pt-1 bg-black/5 dark:bg-white/5 space-y-2 ${idx !== arr.length - 1 ? `border-b ${t.border}` : ''}`}>
+                              {filteredBaseTxs.filter(tx => tx.category === item.name && tx.type === ui.chartView).map(tx => (
+                                 <div key={tx.id} className="flex justify-between items-center text-xs py-1.5 border-b border-dashed border-stone-200 dark:border-stone-700 last:border-0">
+                                    <div className="flex gap-2 items-center">
+                                       <span className={`font-bold ${t.textM}`}>{tx.date.substring(5).replace('-','/')}</span> 
+                                       <span className={`font-bold ${t.text} truncate max-w-[120px]`}>{tx.note || tx.category}</span>
+                                    </div>
+                                    <span className={`font-black ${ui.chartView === 'expense' ? 'text-rose-500' : 'text-emerald-500'}`}>${tx.amount.toLocaleString()}</span>
+                                 </div>
+                              ))}
+                           </div>
+                        )}
+                      </React.Fragment>
                     ))}
                   </div>
-                </div>
 
                 <div className={`${t.cardInner} rounded-[2.5rem] p-7 border ${t.border} shadow-sm`}>
                   <h3 className="font-extrabold text-lg mb-6 flex items-center gap-2"><ArrowRightLeft className="w-6 h-6 text-indigo-500"/> {ui.statsView === 'month' ? '本月' : ui.statsView === 'year' ? '年度' : '區間'}代墊結算</h3>
