@@ -1495,6 +1495,7 @@ export default function App() {
                       </React.Fragment>
                     ))}
                   </div>
+                   </div>
 
                 <div className={`${t.cardInner} rounded-[2.5rem] p-7 border ${t.border} shadow-sm`}>
                   <h3 className="font-extrabold text-lg mb-6 flex items-center gap-2"><ArrowRightLeft className="w-6 h-6 text-indigo-500"/> {ui.statsView === 'month' ? '本月' : ui.statsView === 'year' ? '年度' : '區間'}代墊結算</h3>
