@@ -174,7 +174,7 @@ export default function App() {
     return {
       date: new Date(), dateRange: { start: '', end: '' },
       tab: 'home', subTab: 'bills', statsView: 'month', chartView: 'expense', modal: null, search: '', filterTags: [], filterAccount: localStorage.getItem('homeLedgerDefaultAccount') || 'all',
-      isDark: savedIsDark, confirm: null, selectedItem: null, toast: null, selectedTx: null, isManageTags: false, filterStartDate: '', filterEndDate: '', filterCurrency: 'all'
+      isDark: savedIsDark, confirm: null, selectedItem: null, toast: null, selectedTx: null, isManageTags: false, filterStartDate: '', filterEndDate: '', filterCurrency: 'all', expandedCat: null
     };
   });
 
