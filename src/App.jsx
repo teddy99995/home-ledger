@@ -1084,10 +1084,8 @@ export default function App() {
                 {/* 🖥️ 右欄 (交易明細與操作區) - 佔據桌機 65% 寬度 */}
                 <div className="w-full md:w-[65%] flex flex-col gap-6">
                   
-                  {/* 🌟 步驟二：每日記錄 (降低阻力面板) */}
-                  <div className={`p-2 rounded-[1.5rem] border ${t.border} ${t.cardInner} shadow-sm flex gap-2 items-center`}>
-                    <button onClick={handleCallAI} disabled={isAiLoading} className={`flex-1 py-4 rounded-xl font-bold text-sm ${t.primary} ${t.primaryBtnText} flex items-center justify-center gap-2 active:scale-95 shadow-md disabled:opacity-50 transition-all hover:brightness-110`}>
-                       {isAiLoading ? <Loader2 className="animate-spin w-5 h-5"/> : <Mic className="w-5 h-5"/>} 語音隨手記 (推薦)
+                  <button onClick={() => updateUi({ modal: 'ai' })} className={`flex-1 py-4 rounded-xl font-bold text-sm ${t.primary} ${t.primaryBtnText} flex items-center justify-center gap-2 active:scale-95 shadow-md transition-all hover:brightness-110`}>
+                       <Mic className="w-5 h-5"/> 語音隨手記 (推薦)
                     </button>
                     <button onClick={() => handleOpenTx(null)} className={`flex-1 py-4 rounded-xl font-bold text-sm ${t.bg} border ${t.border} flex items-center justify-center gap-2 active:scale-95 shadow-sm transition-all hover:text-indigo-500`}>
                        <Plus className="w-5 h-5"/> 手動精細輸入
@@ -1107,17 +1105,29 @@ export default function App() {
                     </div>
                     
                     <div className="flex items-center gap-2">
-                       <div className={`flex items-center flex-1 p-3 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm focus-within:ring-2 ${t.ring} transition-all`}>
+                       {/* 開始日期 */}
+                       <div className={`relative flex items-center flex-1 p-3 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm focus-within:ring-2 ${t.ring} transition-all`}>
                          <Calendar className={`w-4 h-4 ${t.textM} mr-2 shrink-0`} />
-                         <input type="date" value={ui.searchDateStart || ''} onChange={e => updateUi({ searchDateStart: e.target.value })} className={`w-full bg-transparent outline-none font-bold text-sm ${ui.searchDateStart ? t.text : t.textM}`} />
+                         <span className={`w-full font-bold text-sm ${ui.searchDateStart ? t.text : t.textM}`}>
+                           {ui.searchDateStart ? ui.searchDateStart.replace(/-/g, '/') : '開始日期'}
+                         </span>
+                         <input type="date" value={ui.searchDateStart || ''} onChange={e => updateUi({ searchDateStart: e.target.value })} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                        </div>
+                       
                        <span className={`font-bold text-sm ${t.textM}`}>至</span>
-                       <div className={`flex items-center flex-1 p-3 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm focus-within:ring-2 ${t.ring} transition-all`}>
+                       
+                       {/* 結束日期 */}
+                       <div className={`relative flex items-center flex-1 p-3 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm focus-within:ring-2 ${t.ring} transition-all`}>
                          <Calendar className={`w-4 h-4 ${t.textM} mr-2 shrink-0`} />
-                         <input type="date" value={ui.searchDateEnd || ''} onChange={e => updateUi({ searchDateEnd: e.target.value })} className={`w-full bg-transparent outline-none font-bold text-sm ${ui.searchDateEnd ? t.text : t.textM}`} />
+                         <span className={`w-full font-bold text-sm ${ui.searchDateEnd ? t.text : t.textM}`}>
+                           {ui.searchDateEnd ? ui.searchDateEnd.replace(/-/g, '/') : '結束日期'}
+                         </span>
+                         <input type="date" value={ui.searchDateEnd || ''} onChange={e => updateUi({ searchDateEnd: e.target.value })} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                        </div>
+                       
+                       {/* 清除按鈕 */}
                        {(ui.searchDateStart || ui.searchDateEnd) && (
-                         <button onClick={() => updateUi({ searchDateStart: '', searchDateEnd: '' })} className={`p-3 rounded-2xl ${t.cardInner} border ${t.border} shadow-sm active:scale-95 text-rose-500 hover:bg-rose-500/10 transition-all`}><X className="w-5 h-5" /></button>
+                         <button onClick={() => updateUi({ searchDateStart: '', searchDateEnd: '' })} className={`relative z-10 p-3 rounded-2xl ${t.cardInner} border ${t.border} shadow-sm active:scale-95 text-rose-500 hover:bg-rose-500/10 transition-all`}><X className="w-5 h-5" /></button>
                        )}
                     </div>
                   </div>
