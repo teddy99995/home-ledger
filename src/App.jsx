@@ -2752,7 +2752,7 @@ const CategoryForm = ({ categories, onSave, onBack, t }) => {
                    <span className="text-2xl drop-shadow-sm">{c.icon}</span>
                    <span className="font-bold text-sm group-hover:text-indigo-500 transition-colors">{c.name}</span>
                 </div>
-                <Trash2 onClick={() => handleRemove(c.name)} className="w-5 h-5 text-stone-400 hover:text-red-500 cursor-pointer transition-colors" />
+                <Trash2 onClick={() => handleRemove(c.name)} className={`w-5 h-5 text-stone-400 hover:text-red-500 cursor-pointer transition-colors`} />
              </div>
            ))}
          </div>
