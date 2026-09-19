@@ -1084,7 +1084,9 @@ export default function App() {
                 {/* 🖥️ 右欄 (交易明細與操作區) - 佔據桌機 65% 寬度 */}
                 <div className="w-full md:w-[65%] flex flex-col gap-6">
                   
-                  <button onClick={() => updateUi({ modal: 'ai' })} className={`flex-1 py-4 rounded-xl font-bold text-sm ${t.primary} ${t.primaryBtnText} flex items-center justify-center gap-2 active:scale-95 shadow-md transition-all hover:brightness-110`}>
+                  {/* 🌟 步驟二：每日記錄 (降低阻力面板) */}
+                  <div className={`p-2 rounded-[1.5rem] border ${t.border} ${t.cardInner} shadow-sm flex gap-2 items-center`}>
+                    <button onClick={() => updateUi({ modal: 'ai' })} className={`flex-1 py-4 rounded-xl font-bold text-sm ${t.primary} ${t.primaryBtnText} flex items-center justify-center gap-2 active:scale-95 shadow-md transition-all hover:brightness-110`}>
                        <Mic className="w-5 h-5"/> 語音隨手記 (推薦)
                     </button>
                     <button onClick={() => handleOpenTx(null)} className={`flex-1 py-4 rounded-xl font-bold text-sm ${t.bg} border ${t.border} flex items-center justify-center gap-2 active:scale-95 shadow-sm transition-all hover:text-indigo-500`}>
