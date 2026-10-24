@@ -444,12 +444,18 @@ export default function App() {
   // 🌟 終極旅行過濾器：只要旅行模式開著，強制鎖定區段內的記帳明細！
   const travelTxs = useMemo(() => {
     if (!settings.travelMode) return null;
+    
+    // 🚀 效能修復：如果還沒設定旅行日期，預設只抓「當月」資料，避免載入歷史全庫導致卡頓！
+    if (!settings.travelStartDate && !settings.travelEndDate) {
+      return data.tx.filter(t => t.month === cMonth);
+    }
+    
     return data.tx.filter(t => {
       const ds = !settings.travelStartDate || t.date >= settings.travelStartDate;
       const de = !settings.travelEndDate || t.date <= settings.travelEndDate;
       return ds && de;
     });
-  }, [data.tx, settings.travelMode, settings.travelStartDate, settings.travelEndDate]);
+  }, [data.tx, settings.travelMode, settings.travelStartDate, settings.travelEndDate, cMonth]);
 
   // 🌟 判斷是否正在搜尋 (輸入關鍵字、標籤、或選擇搜尋日期區間)
   const isSearching = Boolean(ui.search || ui.filterTags.length > 0 || ui.searchDateStart || ui.searchDateEnd);
@@ -776,93 +782,101 @@ export default function App() {
      }
   }
 
-  // 🌟 四步驟實踐法：核心計算引擎 (支援依據帳戶動態切換預算、帳單、存款)
+ // 🌟 四步驟實踐法：核心計算引擎 (升級：公私預算雙軌制)
   const fourSteps = useMemo(() => {
-    // 1. 取得當前選擇的帳戶 (若選 all 則包含全部 activeAccounts)
-    const selectedAccounts = ui.filterAccount === 'all' ? activeAccounts : activeAccounts.filter(a => a.id === ui.filterAccount);
+    const calcForAccs = (accs) => {
+      let total = accs.reduce((sum, a) => sum + Number(a.budget || 0), 0);
+      const bills = data.bills.filter(b => !b.isPaid).reduce((sum, b) => {
+         const accIds = b.accountIds && b.accountIds.length > 0 ? b.accountIds : [activeAccounts[0]?.id];
+         const overlap = accIds.filter(id => accs.some(sa => sa.id === id)).length;
+         if (overlap === 0) return sum;
+         return sum + (Number(b.amount) / accIds.length) * overlap;
+      }, 0);
+      const savings = data.savings.filter(s => !s.isSaved && accs.some(sa => sa.id === s.accountId)).reduce((sum, s) => sum + Number(s.amount), 0);
+      // 注意：雙軌制需計算整體，所以改用 baseTxs，而非已經被 ui.filterAccount 過濾過的 filteredBaseTxs
+      const exp = baseTxs.filter(t => t.type === 'expense' && accs.some(sa => sa.id === t.accountId) && !t.tags?.includes('固定帳單') && !t.tags?.includes('自動存錢')).reduce((s, t) => s + t.amount, 0);
+      const usable = total - bills - savings;
+      const remain = usable - exp;
+      return { total, bills, savings, usable, exp, remain };
+    };
 
-    // 2. 初始總預算 (各帳戶獨立設定：加總所選帳戶的預算)
-    let totalBudget = selectedAccounts.reduce((sum, a) => sum + Number(a.budget || 0), 0);
-    // 防呆：如果都沒設，且是看全部帳戶，則採用設定裡面的全域家庭預算
-    if (totalBudget === 0 && ui.filterAccount === 'all') {
-        totalBudget = rollover.budget; 
+    const joint = calcForAccs(activeAccounts.filter(a => a.type === 'joint'));
+    const personal = calcForAccs(activeAccounts.filter(a => a.type !== 'joint'));
+    const all = calcForAccs(activeAccounts);
+    
+    // 智慧防呆：如果都沒設帳戶預算，採用總設定的預算，並自動 70% 歸家用、30% 歸個人
+    if (all.total === 0) all.total = rollover.budget; 
+    if (joint.total === 0 && personal.total === 0 && all.total > 0) {
+       joint.total = Math.round(all.total * 0.7);
+       personal.total = all.total - joint.total;
+       joint.usable = joint.total - joint.bills - joint.savings; joint.remain = joint.usable - joint.exp;
+       personal.usable = personal.total - personal.bills - personal.savings; personal.remain = personal.usable - personal.exp;
     }
 
-    // 3. 待繳固定帳單 (精準計算屬於「所選帳戶」的應繳比例)
-    const unpaidBills = data.bills.filter(b => !b.isPaid).reduce((sum, b) => {
-       const accIds = b.accountIds && b.accountIds.length > 0 ? b.accountIds : [activeAccounts[0]?.id];
-       const overlap = accIds.filter(id => selectedAccounts.some(sa => sa.id === id)).length;
-       if (overlap === 0) return sum;
-       return sum + (Number(b.amount) / accIds.length) * overlap;
-    }, 0);
+    const current = (!ui.filterAccount || ui.filterAccount === 'all') ? all : calcForAccs(activeAccounts.filter(a => a.id === ui.filterAccount));
 
-    // 4. 待存目標存款 (精準過濾目標存入「所選帳戶」的計畫)
-    const unpaidSavings = data.savings.filter(s => !s.isSaved && selectedAccounts.some(sa => sa.id === s.accountId)).reduce((sum, s) => sum + Number(s.amount), 0);
-    
-    // 步驟 1. 分配預算
-    const dailyUsableBudget = totalBudget - unpaidBills - unpaidSavings;
-
-    // 步驟 2. 日常開銷計算
-    const dailyExpenses = filteredBaseTxs.filter(t => t.type === 'expense' && !t.tags?.includes('固定帳單') && !t.tags?.includes('自動存錢')).reduce((s, t) => s + t.amount, 0);
-    const remainingBudget = dailyUsableBudget - dailyExpenses;
-
-    // 步驟 4. 彈性調整：當期剩餘天數與「每日安全額度」
     const todayDate = new Date();
     const lastDayOfMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0).getDate();
     const daysLeft = lastDayOfMonth - todayDate.getDate() + 1;
-    const safeDailySpend = daysLeft > 0 ? Math.max(0, Math.floor(remainingBudget / daysLeft)) : 0;
+    const safeDailySpend = daysLeft > 0 ? Math.max(0, Math.floor(current.remain / daysLeft)) : 0;
 
-    // 🌟 步驟 3. 週與月結算：計算「非必要花費」
     const monthlyNonEssential = filteredBaseTxs.filter(t => t.type === 'expense' && t.isNonEssential).reduce((s, t) => s + t.amount, 0);
-
     const currentDayOfWeek = todayDate.getDay() === 0 ? 6 : todayDate.getDay() - 1; 
-    const startOfWeek = new Date(todayDate);
-    startOfWeek.setDate(todayDate.getDate() - currentDayOfWeek);
-    const startOfWeekStr = getLocalYYYYMMDD(startOfWeek);
-    
-    const weeklyNonEssential = filteredBaseTxs.filter(t => t.type === 'expense' && t.isNonEssential && t.date >= startOfWeekStr).reduce((s, t) => s + t.amount, 0);
-    const weeklyBudget = Math.floor(dailyUsableBudget / 4.3); 
+    const startOfWeek = new Date(todayDate); startOfWeek.setDate(todayDate.getDate() - currentDayOfWeek);
+    const weeklyNonEssential = filteredBaseTxs.filter(t => t.type === 'expense' && t.isNonEssential && t.date >= getLocalYYYYMMDD(startOfWeek)).reduce((s, t) => s + t.amount, 0);
+    const weeklyBudget = Math.floor(current.usable / 4.3); 
 
-    return { totalBudget, dailyUsableBudget, dailyExpenses, remainingBudget, safeDailySpend, monthlyNonEssential, weeklyNonEssential, weeklyBudget, unpaidBills, unpaidSavings };
-  }, [data.bills, data.savings, rollover.budget, filteredBaseTxs, ui.filterAccount, activeAccounts]);
+    return { joint, personal, current, safeDailySpend, monthlyNonEssential, weeklyNonEssential, weeklyBudget };
+  }, [data.bills, data.savings, rollover.budget, baseTxs, filteredBaseTxs, ui.filterAccount, activeAccounts]);
    
 // 🌟 負責開啟記帳彈出視窗的函數
   const handleOpenTx = (tx = null) => {
     try { updateUi({ modal: 'tx', selectedTx: tx }); } catch (e) { showToast("系統載入異常，請重試", "error"); }
   };
 
-  // 🌟 負責儲存記帳資料與防呆攔截的函數
-  const handleTxSave = (txData) => { 
-      const { id, recordDate, recordTime, ...payload } = txData;
+  // 🌟 負責儲存記帳資料與防呆攔截的函數 (升級：支援信用卡自動分期)
+  const handleTxSave = async (txData) => { 
+      const { id, recordDate, recordTime, installment = 1, ...payload } = txData;
       payload.updatedAt = serverTimestamp();
-      payload.date = recordDate || getLocalYYYYMMDD(ui.date);
-      payload.month = payload.date.substring(0, 7);
+      const baseDateStr = recordDate || getLocalYYYYMMDD(ui.date);
       payload.recordTime = recordTime || getLocalHHmm(new Date());
       Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
       
-      const saveActual = () => {
-          if(id) doAction(() => updateDoc(getDocRef('shared_ledger', id), payload), '修改成功'); 
-          else { payload.createdAt = serverTimestamp(); payload.createdBy = user ? user.uid : 'unknown'; doAction(() => addDoc(getCol('shared_ledger'), payload), '記帳成功'); }
+      const saveActual = async () => {
+          if (id) {
+             payload.date = baseDateStr;
+             payload.month = payload.date.substring(0, 7);
+             await doAction(() => updateDoc(getDocRef('shared_ledger', id), payload), '修改成功'); 
+          } else { 
+             const baseAmt = Math.round(payload.amount / installment);
+             const firstAmt = payload.amount - (baseAmt * (installment - 1));
+             const [y, m, d] = baseDateStr.split('-').map(Number);
+             
+             try {
+               // 🌟 核心分期引擎：自動跨月產生多筆帳單
+               for (let i = 0; i < installment; i++) {
+                 const tDate = new Date(y, m - 1 + i, d);
+                 const dStr = getLocalYYYYMMDD(tDate);
+                 const p = { 
+                   ...payload, 
+                   amount: i === 0 ? firstAmt : baseAmt, // 確保除不盡的餘數放在第一期
+                   date: dStr, month: dStr.substring(0, 7),
+                   note: installment > 1 ? `${payload.note} (${i+1}/${installment}期)`.trim() : payload.note,
+                   createdAt: serverTimestamp(), createdBy: user ? user.uid : 'unknown'
+                 };
+                 await addDoc(getCol('shared_ledger'), p);
+               }
+               showToast(`記帳成功${installment > 1 ? ` (已分 ${installment} 期自動入帳)` : ''}`);
+             } catch(e) { showToast("儲存失敗", "error"); }
+             updateUi({ modal: null, confirm: null, selectedTx: null });
+          }
       };
 
-      // 🛡️ 天價防護
-      if (payload.amount >= 1000000) {
-          confirmAction('金額高達百萬！請輸入確認文字以解鎖', saveActual, '確認解鎖');
-          return;
-      }
+      if (payload.amount >= 1000000) return confirmAction('金額高達百萬！請確認解鎖', saveActual, '確認解鎖');
+      if (baseDateStr > getLocalYYYYMMDD(new Date()) && installment === 1) return confirmAction('確定要記錄未來的帳務嗎？', saveActual);
       
-      // 🛡️ 未來日期防穿梭
-      if (payload.date > getLocalYYYYMMDD(new Date())) {
-          confirmAction('確定要記錄未來的帳務嗎？', saveActual);
-          return;
-      }
-
-      // 🛡️ 重複記帳攔截
-      const isDuplicate = data.tx.some(t => t.amount === payload.amount && t.category === payload.category && t.date === payload.date && t.id !== id);
-      if (isDuplicate && !id) {
-          confirmAction('今天已有一筆一模一樣的紀錄，確定要重複記帳嗎？', saveActual);
-          return;
-      }
+      const isDuplicate = data.tx.some(t => t.amount === payload.amount && t.category === payload.category && t.date === baseDateStr && t.id !== id);
+      if (isDuplicate && !id && installment === 1) return confirmAction('今天已有一筆一模一樣的紀錄，要重複記帳嗎？', saveActual);
 
       saveActual();
   };
@@ -940,45 +954,46 @@ export default function App() {
             </div>
           )}
 
-          {/* 🌟 頂部 Header：升級玻璃透視與動態問候 */}
+          {/* 🌟 頂部 Header：絕美漸層與立體光影升級版 */}
           {(() => {
             const hour = new Date().getHours();
             const greeting = hour < 12 ? '早安' : hour < 18 ? '午安' : '晚安';
             return (
-              <header className={`sticky top-0 px-6 pt-safe pb-4 flex justify-between items-center z-30 border-b ${t.border} ${ui.isDark ? 'bg-[#161925]/85' : 'bg-[#FDFBF7]/85'} backdrop-blur-xl transition-all shadow-sm`}>
-                {/* 🌟 修改 1：將 w-24 改為 w-40 */}
-                <div className="flex gap-3 w-40">
-                   <button onClick={() => updateUi({ isDark: !ui.isDark })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-md transition-all text-stone-500 hover:${t.primaryText}`}>
+              <header className={`sticky top-0 px-6 pt-safe pb-4 flex justify-between items-center z-30 transition-all ${ui.isDark ? 'bg-gradient-to-b from-[#161925]/95 to-[#161925]/80 border-b border-white/5 shadow-[0_4px_30px_rgba(0,0,0,0.5)]' : 'bg-gradient-to-b from-white/95 to-white/80 border-b border-white/50 shadow-[0_4px_30px_rgba(0,0,0,0.03)]'} backdrop-blur-2xl`}>
+                
+                {/* 裝飾性頂部光線 (僅亮色模式明顯) */}
+                {!ui.isDark && <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#E3B59B]/30 to-transparent"></div>}
+                
+                <div className="flex gap-3 w-40 relative z-10">
+                   <button onClick={() => updateUi({ isDark: !ui.isDark })} className={`p-2.5 rounded-2xl border ${t.border} ${ui.isDark ? 'bg-[#202536] shadow-inner' : 'bg-white shadow-sm hover:shadow-md'} active:scale-95 transition-all text-stone-500 hover:${t.primaryText}`}>
                      {ui.isDark ? <Sun className="w-5 h-5"/> : <Moon className="w-5 h-5"/>}
                    </button>
-                   <button onClick={() => updateUi({ modal: 'settings' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-md transition-all text-stone-500 hover:${t.primaryText}`}>
+                   <button onClick={() => updateUi({ modal: 'settings' })} className={`p-2.5 rounded-2xl border ${t.border} ${ui.isDark ? 'bg-[#202536] shadow-inner' : 'bg-white shadow-sm hover:shadow-md'} active:scale-95 transition-all text-stone-500 hover:${t.primaryText}`}>
                      <Settings className="w-5 h-5"/>
                    </button>
                 </div>
                 
-                <div className="flex-1 text-center shrink-0">
-                  <h1 className="text-xl font-black tracking-wider flex items-center justify-center gap-1.5">
+                <div className="flex-1 text-center shrink-0 relative z-10">
+                  <h1 className="text-xl font-black tracking-wider flex items-center justify-center gap-1.5 drop-shadow-sm">
                     <span className={`text-sm font-bold ${t.textM} mr-1`}>{greeting}，</span>
                     {settings.travelMode && <Plane className="w-5 h-5 text-[#0EA5E9]" />} 
                     Home Ledger 
-                    {!settings.travelMode && <span className="text-rose-500 animate-pulse">♡</span>}
+                    {!settings.travelMode && <span className="text-rose-500 animate-pulse drop-shadow-md">♡</span>}
                   </h1>
                 </div>
                 
-                <div className="flex gap-3 w-40 justify-end relative">
-                  {/* 🌟 外匯計算機：只要開啟旅行模式就顯示 */}
+                <div className="flex gap-3 w-40 justify-end relative z-10">
                   {settings.travelMode && (
-                    <button onClick={() => updateUi({ modal: 'fx_calc' })} className={`p-2.5 rounded-full border border-[#0EA5E9]/30 bg-[#0EA5E9]/10 text-[#0EA5E9] active:scale-95 hover:shadow-md transition-all`}>
+                    <button onClick={() => updateUi({ modal: 'fx_calc' })} className={`p-2.5 rounded-2xl border border-[#0EA5E9]/30 bg-[#0EA5E9]/10 text-[#0EA5E9] active:scale-95 shadow-sm hover:shadow-md transition-all`}>
                       <ArrowRightLeft className="w-5 h-5"/>
                     </button>
                   )}
-
-                  <button onClick={() => updateUi({ modal: 'barcode' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-md transition-all text-stone-500 hover:${t.primaryText}`}>
+                  <button onClick={() => updateUi({ modal: 'barcode' })} className={`p-2.5 rounded-2xl border ${t.border} ${ui.isDark ? 'bg-[#202536] shadow-inner' : 'bg-white shadow-sm hover:shadow-md'} active:scale-95 transition-all text-stone-500 hover:${t.primaryText}`}>
                     <Barcode className="w-5 h-5"/>
                   </button>
-                  <button onClick={() => updateUi({ modal: 'notify' })} className={`p-2.5 rounded-full border ${t.border} ${t.bg} active:scale-95 hover:shadow-md transition-all relative text-stone-500 hover:${t.primaryText}`}>
+                  <button onClick={() => updateUi({ modal: 'notify' })} className={`p-2.5 rounded-2xl border ${t.border} ${ui.isDark ? 'bg-[#202536] shadow-inner' : 'bg-white shadow-sm hover:shadow-md'} active:scale-95 transition-all relative text-stone-500 hover:${t.primaryText}`}>
                     <Bell className="w-5 h-5"/>
-                    {activeAlerts.length > 0 && <span className={`absolute top-1 right-1 w-3 h-3 bg-red-500 border-2 ${ui.isDark ? 'border-[#202536]' : 'border-white'} rounded-full animate-bounce`}></span>}
+                    {activeAlerts.length > 0 && <span className={`absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 border-2 ${ui.isDark ? 'border-[#202536]' : 'border-white'} rounded-full animate-bounce shadow-sm`}></span>}
                   </button>
                 </div>
               </header>
@@ -1007,56 +1022,196 @@ export default function App() {
                      </button>
                   </div>
 
-                  {/* 🌟 總收入與總支出 (加回來方便對帳！) */}
-                  <div className="grid grid-cols-2 gap-4 mb-4 relative z-10">
-                      <div className={`p-5 rounded-[2rem] border ${t.border}${t.bg} shadow-sm bg-gradient-to-br from-emerald-500/5 to-transparent`}>
-                          <p className={`text-xs font-bold ${t.textM} mb-1 flex items-center gap-1.5`}><TrendingUp className="w-4 h-4 text-emerald-500"/>總收入</p>
-                          <h2 className="text-2xl sm:text-3xl font-black text-emerald-500 drop-shadow-sm">${hStats.inc.toLocaleString()}</h2>
+                  {/* 🌟 總收入與總支出 (極簡琉璃質感升級版) */}
+                  <div className="grid grid-cols-2 gap-3 mb-6 relative z-10 px-1">
+                      <div className={`p-4 sm:p-5 rounded-[2rem] border ${ui.isDark ? 'border-[#10B981]/20 bg-gradient-to-br from-[#10B981]/10 to-transparent' : 'border-[#10B981]/30 bg-gradient-to-br from-[#10B981]/5 to-transparent'} shadow-sm relative overflow-hidden flex flex-col justify-center items-center transition-all hover:shadow-md`}>
+                          {/* 柔和發光背景 */}
+                          <div className={`absolute -right-4 -bottom-4 w-24 h-24 ${ui.isDark ? 'bg-[#10B981]/20' : 'bg-[#10B981]/10'} rounded-full blur-[20px] pointer-events-none`}></div>
+                          
+                          <p className={`text-xs font-bold ${ui.isDark ? 'text-[#10B981]/90' : 'text-[#10B981]/80'} mb-2 flex items-center gap-1.5 z-10`}><TrendingUp className="w-4 h-4"/> 總收入</p>
+                          <h2 className={`text-[1.75rem] leading-none font-extrabold ${ui.isDark ? 'text-[#10B981]' : 'text-[#22C55E]'} drop-shadow-sm tracking-tight z-10`}>${hStats.inc.toLocaleString()}</h2>
                       </div>
-                      <div className={`p-5 rounded-[2rem] border ${t.border}${t.bg} shadow-sm bg-gradient-to-br from-rose-500/5 to-transparent`}>
-                          <p className={`text-xs font-bold ${t.textM} mb-1 flex items-center gap-1.5`}><TrendingDown className="w-4 h-4 text-rose-500"/>總支出</p>
-                          <h2 className="text-2xl sm:text-3xl font-black text-rose-500 drop-shadow-sm">${hStats.exp.toLocaleString()}</h2>
+                      
+                      <div className={`p-4 sm:p-5 rounded-[2rem] border ${ui.isDark ? 'border-[#F43F5E]/20 bg-gradient-to-br from-[#F43F5E]/10 to-transparent' : 'border-[#F43F5E]/20 bg-gradient-to-br from-[#F43F5E]/5 to-transparent'} shadow-sm relative overflow-hidden flex flex-col justify-center items-center transition-all hover:shadow-md`}>
+                          {/* 柔和發光背景 */}
+                          <div className={`absolute -right-4 -bottom-4 w-24 h-24 ${ui.isDark ? 'bg-[#F43F5E]/20' : 'bg-[#F43F5E]/10'} rounded-full blur-[20px] pointer-events-none`}></div>
+                          
+                          <p className={`text-xs font-bold ${ui.isDark ? 'text-[#F43F5E]/90' : 'text-[#F43F5E]/70'} mb-2 flex items-center gap-1.5 z-10`}><TrendingDown className="w-4 h-4"/> 總支出</p>
+                          <h2 className={`text-[1.75rem] leading-none font-extrabold ${ui.isDark ? 'text-[#F43F5E]' : 'text-[#FB7185]'} drop-shadow-sm tracking-tight z-10`}>${hStats.exp.toLocaleString()}</h2>
                       </div>
                   </div>
-                  <div className="flex items-baseline gap-3 mb-6 px-2 relative z-10">
-                    <span className={`text-sm font-bold ${t.textM}`}>實際結餘</span>
-                    <h2 className={`text-[3.5rem] leading-none font-black tracking-tighter drop-shadow-sm ${hStats.inc - hStats.exp >= 0 ? t.text : 'text-rose-500'}`}>
-                      ${(hStats.inc - hStats.exp).toLocaleString()}
-                    </h2>
+                  
+                  {/* 實際結餘大字 (極簡排版) */}
+                  <div className="flex flex-col mb-8 px-2 relative z-10">
+                    <span className={`text-[11px] font-extrabold ${t.textM} mb-1 opacity-70`}>實際餘額</span>
+                    <div className="flex items-baseline gap-3">
+                      <h2 className={`text-[3.5rem] sm:text-[4rem] leading-none font-black tracking-tighter drop-shadow-sm ${hStats.inc - hStats.exp >= 0 ? t.text : 'text-[#F43F5E]'}`}>
+                        ${(hStats.inc - hStats.exp).toLocaleString()}
+                      </h2>
+                    </div>
                   </div>
 
-                  {/* 🌟 步驟一與四：預算分配與彈性調整面板 */}
-                  <div className={`p-6 rounded-[2rem] border ${t.border} ${t.cardInner} shadow-sm relative overflow-hidden`}>
-                     <h3 className="font-extrabold text-sm mb-5 flex items-center gap-2 tracking-wider"><PieChartIcon className="w-4 h-4 text-indigo-500"/> 四步驟：預算分配</h3>
-                     <div className="space-y-4 relative z-10">
-                       <div className="flex justify-between items-end">
-                         <span className={`text-xs font-bold ${t.textM}`}>初始總預算</span>
-                         {/* 🌟 綁定新的 totalBudget */}
-                         <span className="font-black text-lg">${fourSteps.totalBudget.toLocaleString()}</span>
-                       </div>
-                       <div className="flex justify-between items-end text-rose-500">
-                         <span className="text-xs font-bold">已扣固定開銷</span>
-                         <span className="font-black text-lg">-${fourSteps.unpaidBills.toLocaleString()}</span>
-                       </div>
-                       <div className="flex justify-between items-end text-emerald-500 border-b border-dashed border-stone-200 dark:border-stone-700 pb-4">
-                         <span className="text-xs font-bold">已扣目標存款</span>
-                         <span className="font-black text-lg">-${fourSteps.unpaidSavings.toLocaleString()}</span>
-                       </div>
-                       <div className="flex justify-between items-end pt-2">
-                         <span className={`text-sm font-bold ${t.text}`}>分配日常可用總額</span>
-                         <span className="font-black text-3xl text-indigo-500 drop-shadow-sm">${fourSteps.dailyUsableBudget.toLocaleString()}</span>
-                       </div>
-                       
-                       {/* 步驟四：彈性調整 */}
-                       <div className={`mt-4 p-5 rounded-2xl ${t.bg} border ${t.border} shadow-inner`}>
-                         <div className="flex justify-between items-center mb-3">
-                            <span className={`text-xs font-bold ${t.textM}`}>目前剩餘可運用</span>
-                            <span className={`font-black text-2xl ${fourSteps.remainingBudget < 0 ? 'text-rose-500' : t.text}`}>${fourSteps.remainingBudget.toLocaleString()}</span>
+                  {/* 🌟 旅程專屬外幣儀表板 (旅行模式開啟時顯示) */}
+                  {settings.travelMode && (
+                     <div className={`p-6 rounded-[2rem] border ${t.border} ${t.cardInner} shadow-sm relative overflow-hidden bg-gradient-to-br ${ui.isDark ? 'from-[#0EA5E9]/10' : 'from-[#E0F2FE]'} to-transparent mb-6`}>
+                        <div className="flex justify-between items-center mb-5 relative z-10">
+                           <h3 className="font-extrabold text-sm flex items-center gap-2 tracking-wider text-[#0EA5E9]"><Plane className="w-4 h-4"/> 旅程外幣儀表板</h3>
+                           <button onClick={() => updateUi({ modal: 'settings' })} className={`text-[10px] font-bold px-2 py-1 rounded bg-[#0EA5E9]/10 text-[#0EA5E9] border border-[#0EA5E9]/20 active:scale-95 transition-all`}>設定匯率</button>
+                        </div>
+                        <div className="space-y-4 relative z-10">
+                          <div className="flex justify-between items-end border-b border-dashed border-[#0EA5E9]/30 pb-4">
+                            <span className={`text-xs font-bold ${t.textM}`}>旅程總支出 (TWD)</span>
+                            <span className="font-black text-3xl text-[#0EA5E9] drop-shadow-sm">${hStats.exp.toLocaleString()}</span>
+                          </div>
+                          
+                          {/* 動態解析並加總外幣消費 (真實國旗與純淨玻璃修復版) */}
+                          {(() => {
+                            const fxStats = {};
+                            (mTx || []).forEach(tx => {
+                               if (tx.type === 'expense' && tx.note) {
+                                  const m = tx.note.match(/\[.*? ([A-Z]{3}) ([\d.]+)\]/);
+                                  if (m) fxStats[m[1]] = (fxStats[m[1]] || 0) + Number(m[2]);
+                               }
+                            });
+                            if (Object.keys(fxStats).length === 0) return <div className={`text-center text-xs font-bold ${t.textM} py-4`}>尚無外幣消費紀錄</div>;
+                            
+                            // 🌍 改用 FlagCDN 取得真實國旗圖片 (完美解決 Windows 只顯示 US/EG 字母的問題)
+                            const getCountryCode = (code) => ({ USD: 'us', EGP: 'eg', JPY: 'jp', KRW: 'kr', EUR: 'eu', THB: 'th', HKD: 'hk', GBP: 'gb', AUD: 'au', CNY: 'cn', SGD: 'sg', MYR: 'my', VND: 'vn', AED: 'ae' }[code] || 'un');
+
+                            return Object.entries(fxStats).map(([code, amt]) => {
+                               const countryName = getCurrencyName(code);
+                               const countryCode = getCountryCode(code);
+                               const flagUrl = `https://flagcdn.com/w80/${countryCode}.png`;
+                               
+                               return (
+                                 <div key={code} className={`relative p-4 sm:p-5 rounded-[1.5rem] ${ui.isDark ? 'bg-[#172033]/80 border-white/5' : 'bg-white/70 border-white/80'} shadow-[0_8px_30px_rgb(0,0,0,0.06)] backdrop-blur-xl overflow-hidden flex items-center group hover:scale-[1.02] transition-all mb-3 last:mb-0`}>
+                                    
+                                    {/* 🌟 裝飾性背景光斑 (Bubbles) */}
+                                    <div className="absolute top-3 left-6 w-3 h-3 bg-[#0EA5E9] rounded-full blur-[3px] opacity-40 group-hover:scale-150 transition-transform duration-700"></div>
+                                    <div className="absolute bottom-3 right-16 w-5 h-5 bg-[#0EA5E9] rounded-full blur-[5px] opacity-20 group-hover:-translate-y-2 transition-transform duration-700"></div>
+                                    <div className="absolute top-8 left-24 w-2 h-2 bg-indigo-400 rounded-full blur-[2px] opacity-40"></div>
+                                    <div className="absolute top-4 right-8 w-2.5 h-2.5 bg-blue-300 rounded-full blur-[2px] opacity-50 group-hover:translate-x-2 transition-transform duration-700"></div>
+
+                                    {/* 左側：國旗圓圈與資訊 */}
+                                    <div className="flex items-center gap-3 sm:gap-4 flex-1 relative z-10">
+                                       <div className={`w-14 h-14 rounded-full ${ui.isDark ? 'bg-[#0B101E]' : 'bg-white'} flex items-center justify-center shadow-md border ${ui.isDark ? 'border-white/10' : 'border-[#E0F2FE]'} shrink-0 overflow-hidden p-0.5`}>
+                                          <img src={flagUrl} alt={code} className="w-full h-full object-cover rounded-full opacity-90" />
+                                       </div>
+                                       
+                                       <div className="flex flex-col items-start">
+                                          <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${ui.isDark ? 'bg-[#0EA5E9]/20 text-[#38BDF8] border-[#0EA5E9]/30' : 'bg-[#E0F2FE] text-[#0284C7] border-[#0EA5E9]/20'} text-[9px] font-black mb-1.5 border shadow-sm`}>
+                                             <img src={flagUrl} alt="flag" className="w-3 h-2 object-cover rounded-[1px]" /> {countryName}
+                                          </div>
+                                          <span className={`font-black text-xl leading-none mb-1 ${t.text}`}>{code}</span>
+                                          <span className={`text-[10px] font-bold leading-tight ${t.textM}`}>累積花費</span>
+                                       </div>
+                                    </div>
+                                    
+                                    {/* 中間虛線分隔線 */}
+                                    <div className="h-12 border-l-2 border-dashed border-[#0EA5E9]/30 mx-3 sm:mx-5 relative z-10"></div>
+                                    
+                                    {/* 右側：總金額 */}
+                                    <div className="text-right shrink-0 relative z-10">
+                                       <span className="font-black text-3xl sm:text-4xl text-[#0EA5E9] drop-shadow-sm tracking-tighter">
+                                          $ {amt.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}
+                                       </span>
+                                    </div>
+                                 </div>
+                               );
+                            });
+                          })()}
+                        </div>
+                     </div>
+                  )}
+
+                  {/* 🌟 步驟一與四：預算分配與彈性調整面板 (旅行時自動隱藏) */}
+                  <div className={`p-6 rounded-[2rem] border ${t.border} ${t.cardInner} shadow-sm relative overflow-hidden ${settings.travelMode ? 'hidden' : 'block'}`}>
+                     
+                     {/* 如果選全部帳戶，顯示雙軌；否則顯示單一帳戶詳細拆解 */}
+                     {(!ui.filterAccount || ui.filterAccount === 'all') ? (
+                       <div className="space-y-4 relative z-10">
+                         {/* 🏠 家庭共同預算 (美化升級版) */}
+                         <div className={`relative p-5 rounded-[1.5rem] border ${ui.isDark ? 'border-indigo-500/20 bg-indigo-500/5' : 'border-indigo-100 bg-gradient-to-br from-indigo-50 to-white'} overflow-hidden shadow-sm group transition-all hover:shadow-md`}>
+                            {/* 角落環境光暈 */}
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl -mr-4 -mt-4 pointer-events-none group-hover:scale-110 transition-transform duration-500"></div>
+                            
+                            <div className="flex justify-between items-center mb-3 relative z-10">
+                               <div className="flex items-center gap-3">
+                                  <div className="p-2 bg-indigo-500/10 rounded-[0.85rem] text-indigo-600 dark:text-indigo-400 shadow-inner">
+                                     <Home className="w-4 h-4"/>
+                                  </div>
+                                  <span className={`text-[15px] font-extrabold ${t.text}`}>共同家用</span>
+                               </div>
+                               <div className="text-right">
+                                  <span className={`text-[9px] font-bold ${t.textM} block mb-0.5`}>總可用分配</span>
+                                  <span className="font-black text-sm text-indigo-600 dark:text-indigo-400 drop-shadow-sm">${fourSteps.joint.usable.toLocaleString()}</span>
+                               </div>
+                            </div>
+                            
+                            <div className={`flex justify-between items-end relative z-10 pt-3 border-t border-dashed ${ui.isDark ? 'border-indigo-500/20' : 'border-indigo-200'}`}>
+                               <span className={`text-[11px] font-bold ${t.textM}`}>剩餘可運用</span>
+                               <span className={`font-black text-[1.75rem] leading-none drop-shadow-sm tracking-tight ${fourSteps.joint.remain < 0 ? 'text-rose-500' : t.text}`}>
+                                  ${fourSteps.joint.remain.toLocaleString()}
+                               </span>
+                            </div>
                          </div>
-                         <div className="flex justify-between items-center">
-                            <span className={`text-xs font-bold ${t.textM}`}>建議每日安全額度</span>
-                            <span className="font-black text-xl text-emerald-500">${fourSteps.safeDailySpend.toLocaleString()}</span>
+
+                         {/* 👤 個人零用預算 (美化升級版) */}
+                         <div className={`relative p-5 rounded-[1.5rem] border ${ui.isDark ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-emerald-100 bg-gradient-to-br from-emerald-50 to-white'} overflow-hidden shadow-sm group transition-all hover:shadow-md`}>
+                            {/* 角落環境光暈 */}
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl -mr-4 -mt-4 pointer-events-none group-hover:scale-110 transition-transform duration-500"></div>
+                            
+                            <div className="flex justify-between items-center mb-3 relative z-10">
+                               <div className="flex items-center gap-3">
+                                  <div className="p-2 bg-emerald-500/10 rounded-[0.85rem] text-emerald-600 dark:text-emerald-400 shadow-inner">
+                                     <Wallet className="w-4 h-4"/>
+                                  </div>
+                                  <span className={`text-[15px] font-extrabold ${t.text}`}>個人零用</span>
+                               </div>
+                               <div className="text-right">
+                                  <span className={`text-[9px] font-bold ${t.textM} block mb-0.5`}>總可用分配</span>
+                                  <span className="font-black text-sm text-emerald-600 dark:text-emerald-400 drop-shadow-sm">${fourSteps.personal.usable.toLocaleString()}</span>
+                               </div>
+                            </div>
+                            
+                            <div className={`flex justify-between items-end relative z-10 pt-3 border-t border-dashed ${ui.isDark ? 'border-emerald-500/20' : 'border-emerald-200'}`}>
+                               <span className={`text-[11px] font-bold ${t.textM}`}>剩餘可運用</span>
+                               <span className={`font-black text-[1.75rem] leading-none drop-shadow-sm tracking-tight ${fourSteps.personal.remain < 0 ? 'text-rose-500' : t.text}`}>
+                                  ${fourSteps.personal.remain.toLocaleString()}
+                               </span>
+                            </div>
                          </div>
+                       </div>
+                     ) : (
+                       <div className="space-y-4 relative z-10">
+                         <div className="flex justify-between items-end">
+                           <span className={`text-xs font-bold ${t.textM}`}>帳戶總預算</span>
+                           <span className="font-black text-lg">${fourSteps.current.total.toLocaleString()}</span>
+                         </div>
+                         <div className="flex justify-between items-end text-rose-500">
+                           <span className="text-xs font-bold">已扣固定帳單</span>
+                           <span className="font-black text-lg">-${fourSteps.current.bills.toLocaleString()}</span>
+                         </div>
+                         <div className="flex justify-between items-end text-emerald-500 border-b border-dashed border-stone-200 dark:border-stone-700 pb-4">
+                           <span className="text-xs font-bold">已扣目標存款</span>
+                           <span className="font-black text-lg">-${fourSteps.current.savings.toLocaleString()}</span>
+                         </div>
+                         <div className="flex justify-between items-end pt-2">
+                           <span className={`text-sm font-bold ${t.text}`}>分配日常可用</span>
+                           <span className="font-black text-3xl text-indigo-500 drop-shadow-sm">${fourSteps.current.usable.toLocaleString()}</span>
+                         </div>
+                       </div>
+                     )}
+
+                     {/* 步驟四：彈性調整 (共通) */}
+                     <div className={`mt-4 p-5 rounded-2xl ${t.bg} border ${t.border} shadow-inner relative z-10`}>
+                       <div className="flex justify-between items-center mb-3">
+                          <span className={`text-xs font-bold ${t.textM}`}>目前帳戶總剩餘</span>
+                          <span className={`font-black text-2xl ${fourSteps.current.remain < 0 ? 'text-rose-500' : t.text}`}>${fourSteps.current.remain.toLocaleString()}</span>
+                       </div>
+                       <div className="flex justify-between items-center">
+                          <span className={`text-xs font-bold ${t.textM}`}>建議每日安全額度</span>
+                          <span className="font-black text-xl text-emerald-500">${fourSteps.safeDailySpend.toLocaleString()}</span>
                        </div>
                      </div>
                   </div>
@@ -1086,8 +1241,8 @@ export default function App() {
                   
                   {/* 🌟 步驟二：每日記錄 (降低阻力面板) */}
                   <div className={`p-2 rounded-[1.5rem] border ${t.border} ${t.cardInner} shadow-sm flex gap-2 items-center`}>
-                    <button onClick={handleCallAI} disabled={isAiLoading} className={`flex-1 py-4 rounded-xl font-bold text-sm ${t.primary} ${t.primaryBtnText} flex items-center justify-center gap-2 active:scale-95 shadow-md disabled:opacity-50 transition-all hover:brightness-110`}>
-                       {isAiLoading ? <Loader2 className="animate-spin w-5 h-5"/> : <Mic className="w-5 h-5"/>} 語音隨手記 (推薦)
+                    <button onClick={() => updateUi({ modal: 'ai' })} className={`flex-1 py-4 rounded-xl font-bold text-sm ${t.primary} ${t.primaryBtnText} flex items-center justify-center gap-2 active:scale-95 shadow-md transition-all hover:brightness-110`}>
+                       <Mic className="w-5 h-5"/> 語音隨手記 (推薦)
                     </button>
                     <button onClick={() => handleOpenTx(null)} className={`flex-1 py-4 rounded-xl font-bold text-sm ${t.bg} border ${t.border} flex items-center justify-center gap-2 active:scale-95 shadow-sm transition-all hover:text-indigo-500`}>
                        <Plus className="w-5 h-5"/> 手動精細輸入
@@ -1107,39 +1262,53 @@ export default function App() {
                     </div>
                     
                     <div className="flex items-center gap-2">
-                       <div className={`flex items-center flex-1 p-3 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm focus-within:ring-2 ${t.ring} transition-all`}>
+                       {/* 開始日期 */}
+                       <div className={`relative flex items-center flex-1 p-3 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm focus-within:ring-2 ${t.ring} transition-all`}>
                          <Calendar className={`w-4 h-4 ${t.textM} mr-2 shrink-0`} />
-                         <input type="date" value={ui.searchDateStart || ''} onChange={e => updateUi({ searchDateStart: e.target.value })} className={`w-full bg-transparent outline-none font-bold text-sm ${ui.searchDateStart ? t.text : t.textM}`} />
+                         <span className={`w-full font-bold text-sm ${ui.searchDateStart ? t.text : t.textM}`}>
+                           {ui.searchDateStart ? ui.searchDateStart.replace(/-/g, '/') : '開始日期'}
+                         </span>
+                         <input type="date" value={ui.searchDateStart || ''} onChange={e => updateUi({ searchDateStart: e.target.value })} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                        </div>
+                       
                        <span className={`font-bold text-sm ${t.textM}`}>至</span>
-                       <div className={`flex items-center flex-1 p-3 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm focus-within:ring-2 ${t.ring} transition-all`}>
+                       
+                       {/* 結束日期 */}
+                       <div className={`relative flex items-center flex-1 p-3 rounded-2xl border ${t.border} ${t.cardInner} shadow-sm focus-within:ring-2 ${t.ring} transition-all`}>
                          <Calendar className={`w-4 h-4 ${t.textM} mr-2 shrink-0`} />
-                         <input type="date" value={ui.searchDateEnd || ''} onChange={e => updateUi({ searchDateEnd: e.target.value })} className={`w-full bg-transparent outline-none font-bold text-sm ${ui.searchDateEnd ? t.text : t.textM}`} />
+                         <span className={`w-full font-bold text-sm ${ui.searchDateEnd ? t.text : t.textM}`}>
+                           {ui.searchDateEnd ? ui.searchDateEnd.replace(/-/g, '/') : '結束日期'}
+                         </span>
+                         <input type="date" value={ui.searchDateEnd || ''} onChange={e => updateUi({ searchDateEnd: e.target.value })} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                        </div>
+                       
+                       {/* 清除按鈕 */}
                        {(ui.searchDateStart || ui.searchDateEnd) && (
-                         <button onClick={() => updateUi({ searchDateStart: '', searchDateEnd: '' })} className={`p-3 rounded-2xl ${t.cardInner} border ${t.border} shadow-sm active:scale-95 text-rose-500 hover:bg-rose-500/10 transition-all`}><X className="w-5 h-5" /></button>
+                         <button onClick={() => updateUi({ searchDateStart: '', searchDateEnd: '' })} className={`relative z-10 p-3 rounded-2xl ${t.cardInner} border ${t.border} shadow-sm active:scale-95 text-rose-500 hover:bg-rose-500/10 transition-all`}><X className="w-5 h-5" /></button>
                        )}
                     </div>
                   </div>
 
-                  {/* 🌟 步驟三：週與月結算檢視卡片 */}
-                  <div className={`p-5 flex flex-col gap-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500`}>
-                     <div className="flex justify-between items-center">
-                       <span className="font-bold text-sm flex items-center gap-2"><Target className="w-5 h-5"/> 本月非必要開銷</span>
-                       <div className="text-right">
-                          <span className="font-black text-xl">${fourSteps.monthlyNonEssential.toLocaleString()}</span>
-                          <span className="text-xs font-bold opacity-70 ml-1">/ 月可用 ${fourSteps.dailyUsableBudget.toLocaleString()}</span>
+                  {/* 🌟 步驟三：週與月結算檢視卡片 (旅行模式下自動隱藏) */}
+                  {!settings.travelMode && (
+                    <div className={`p-5 flex flex-col gap-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500`}>
+                       <div className="flex justify-between items-center">
+                         <span className="font-bold text-sm flex items-center gap-2"><Target className="w-5 h-5"/> 本月非必要開銷</span>
+                         <div className="text-right">
+                            <span className="font-black text-xl">${(fourSteps.monthlyNonEssential || 0).toLocaleString()}</span>
+                            <span className="text-xs font-bold opacity-70 ml-1">/ 月可用 ${(fourSteps.current?.usable || 0).toLocaleString()}</span>
+                         </div>
                        </div>
-                     </div>
-                     <div className="border-t border-indigo-500/20"></div>
-                     <div className="flex justify-between items-center">
-                       <span className="font-bold text-sm flex items-center gap-2"><Calendar className="w-5 h-5"/> 本週非必要開銷</span>
-                       <div className="text-right">
-                          <span className="font-black text-xl">${fourSteps.weeklyNonEssential.toLocaleString()}</span>
-                          <span className="text-xs font-bold opacity-70 ml-1">/ 週限額 ${fourSteps.weeklyBudget.toLocaleString()}</span>
+                       <div className="border-t border-indigo-500/20"></div>
+                       <div className="flex justify-between items-center">
+                         <span className="font-bold text-sm flex items-center gap-2"><Calendar className="w-5 h-5"/> 本週非必要開銷</span>
+                         <div className="text-right">
+                            <span className="font-black text-xl">${(fourSteps.weeklyNonEssential || 0).toLocaleString()}</span>
+                            <span className="text-xs font-bold opacity-70 ml-1">/ 週限額 ${(fourSteps.weeklyBudget || 0).toLocaleString()}</span>
+                         </div>
                        </div>
-                     </div>
-                  </div>
+                    </div>
+                  )}
 
                   {/* 對帳模式明細列表 (優化為緊湊列表感) */}
                   <div className={`p-5 rounded-[2rem] border ${t.border} ${t.cardInner} shadow-sm flex-1 space-y-4`}>
@@ -1385,11 +1554,12 @@ export default function App() {
                    )}
                  </div>
 
-                 {/* 🌟 日期模式切換 */}
-                 <div className={`flex ${t.cardInner} p-1.5 rounded-2xl border ${t.border} shadow-sm`}>
-                   <button onClick={() => updateUi({ statsView: 'month' })} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${ui.statsView === 'month' ? `${t.bg} ${t.text} shadow-md` : t.textM}`}>當月分析</button>
-                   <button onClick={() => updateUi({ statsView: 'year' })} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${ui.statsView === 'year' ? `${t.bg} ${t.text} shadow-md` : t.textM}`}>年度總結</button>
-                   <button onClick={() => updateUi({ statsView: 'custom' })} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${ui.statsView === 'custom' ? `${t.bg} ${t.text} shadow-md` : t.textM}`}>自訂區間</button>
+                 {/* 🌟 日期模式切換 (加入行事曆) */}
+                 <div className={`flex ${t.cardInner} p-1.5 rounded-2xl border ${t.border} shadow-sm overflow-x-auto hide-scrollbar gap-1`}>
+                   <button onClick={() => updateUi({ statsView: 'month' })} className={`shrink-0 flex-1 px-2 py-3 rounded-xl text-sm font-bold transition-all ${ui.statsView === 'month' ? `${t.bg} ${t.text} shadow-md` : t.textM}`}>當月分析</button>
+                   <button onClick={() => updateUi({ statsView: 'calendar' })} className={`shrink-0 flex-1 px-2 py-3 rounded-xl text-sm font-bold transition-all ${ui.statsView === 'calendar' ? `${t.bg} ${t.text} shadow-md` : t.textM}`}>行事曆</button>
+                   <button onClick={() => updateUi({ statsView: 'year' })} className={`shrink-0 flex-1 px-2 py-3 rounded-xl text-sm font-bold transition-all ${ui.statsView === 'year' ? `${t.bg} ${t.text} shadow-md` : t.textM}`}>年度總結</button>
+                   <button onClick={() => updateUi({ statsView: 'custom' })} className={`shrink-0 flex-1 px-2 py-3 rounded-xl text-sm font-bold transition-all ${ui.statsView === 'custom' ? `${t.bg} ${t.text} shadow-md` : t.textM}`}>自訂區間</button>
                  </div>
                  
                  <div className="flex justify-between items-center px-2 pt-2 mb-2">
@@ -1426,6 +1596,47 @@ export default function App() {
 
                  {/* 🌟 趨勢折線圖 (僅年度顯示) */}
                  {ui.statsView === 'year' && <LineChart data={yearTrendData} t={t} />}
+
+                 {/* 🌟 行事曆視角 (Calendar View) */}
+                 {ui.statsView === 'calendar' && (
+                   <div className={`${t.cardInner} p-4 sm:p-5 rounded-[2.5rem] border ${t.border} shadow-sm animate-in fade-in zoom-in-95 duration-300 mt-4`}>
+                      <div className="grid grid-cols-7 gap-1 text-center mb-4">
+                         {['日','一','二','三','四','五','六'].map(d => <div key={d} className={`text-xs font-black ${t.textM}`}>{d}</div>)}
+                      </div>
+                      <div className="grid grid-cols-7 gap-1.5">
+                         {(() => {
+                            const year = ui.date.getFullYear();
+                            const month = ui.date.getMonth();
+                            const firstDay = new Date(year, month, 1).getDay();
+                            const daysInMonth = new Date(year, month + 1, 0).getDate();
+                            const days = Array(firstDay).fill(null).concat(Array.from({length: daysInMonth}, (_, i) => i + 1));
+                            
+                            const dailyData = {};
+                            filteredBaseTxs.forEach(tx => {
+                               const day = parseInt(tx.date.split('-')[2], 10);
+                               if (!dailyData[day]) dailyData[day] = { exp: 0, inc: 0 };
+                               if (tx.type === 'expense') dailyData[day].exp += tx.amount;
+                               if (tx.type === 'income') dailyData[day].inc += tx.amount;
+                            });
+
+                            return days.map((d, i) => (
+                               <div key={i} onClick={() => d && updateUi({ searchDateStart: `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`, searchDateEnd: `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`, tab: 'home' })} 
+                                    className={`min-h-[75px] p-1.5 sm:p-2 rounded-2xl border ${d ? `${t.border} ${t.bg} hover:shadow-md cursor-pointer transition-all active:scale-95 flex flex-col` : 'border-transparent'}`}>
+                                  {d && (
+                                    <>
+                                      <span className={`text-[11px] font-black w-6 h-6 flex items-center justify-center rounded-full mb-1 ${new Date().getDate() === d && new Date().getMonth() === month && new Date().getFullYear() === year ? 'bg-indigo-500 text-white shadow-sm' : t.textM}`}>{d}</span>
+                                      <div className="mt-auto space-y-1 w-full overflow-hidden">
+                                        {dailyData[d]?.inc > 0 && <p className="text-[9px] font-black text-emerald-500 bg-emerald-500/10 rounded px-1 py-0.5 truncate border border-emerald-500/20 w-full text-right">+{dailyData[d].inc}</p>}
+                                        {dailyData[d]?.exp > 0 && <p className="text-[9px] font-black text-rose-500 bg-rose-500/10 rounded px-1 py-0.5 truncate border border-rose-500/20 w-full text-right">-{dailyData[d].exp}</p>}
+                                      </div>
+                                    </>
+                                  )}
+                               </div>
+                            ));
+                         })()}
+                      </div>
+                   </div>
+                 )}
 
                  {/* 🌟 收支動態切換按鈕 */}
                  <div className={`flex ${t.cardInner} p-1.5 rounded-2xl border ${t.border} shadow-sm mb-4`}>
@@ -1741,38 +1952,51 @@ export default function App() {
             )}
           </main>
 
-          {/* ================= 懸浮膠囊導覽列 (美化手帳風) ================= */}
+          {/* ================= 懸浮膠囊導覽列 (旗艦琉璃質感) ================= */}
           <div className="fixed bottom-6 pb-safe left-0 right-0 z-40 flex justify-center pointer-events-none px-4">
             <div className="w-full max-w-md md:max-w-lg relative pointer-events-auto">
-              {/* 🌟 發光漣漪記帳按鈕 */}
-              <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-50 group">
+              
+              {/* 🌟 巨型發光記帳按鈕 (懸浮於中央) */}
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 group">
+                {/* 脈衝發光層 */}
+                <div className={`absolute inset-0 rounded-full ${t.primary} opacity-30 blur-md group-hover:scale-125 transition-transform duration-500`}></div>
                 <div className={`absolute inset-1 rounded-full ${t.primary} opacity-40 animate-ping group-hover:animate-none duration-1000`}></div>
-                <button onClick={() => handleOpenTx(null)} className={`relative h-[68px] w-[68px] ${t.primary} ${t.primaryBtnText} rounded-full flex items-center justify-center shadow-[0_8px_25px_rgba(0,0,0,0.2)] active:scale-95 transition-all border-[4px] ${ui.isDark ? 'border-[#202536]' : 'border-white'} hover:scale-105`}>
-                  <Plus className="w-8 h-8" strokeWidth={3} />
+                
+                <button onClick={() => handleOpenTx(null)} className={`relative h-[76px] w-[76px] ${t.primary} ${t.primaryBtnText} rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(0,0,0,0.3)] active:scale-95 transition-all border-[6px] ${ui.isDark ? 'border-[#161925]' : 'border-[#FDFBF7]'} hover:scale-105 z-10 overflow-hidden`}>
+                  {/* 按鈕內部高光反光 */}
+                  <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-full"></div>
+                  <Plus className="w-10 h-10 relative z-10" strokeWidth={3} />
                 </button>
               </div>
               
-              {/* 🌟 懸浮膠囊導覽主體 */}
-              <nav className={`w-full ${ui.isDark ? 'bg-[#202536]/90' : 'bg-white/90'} backdrop-blur-xl border ${t.border} px-6 py-3 flex justify-between items-center h-[72px] rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.08)] transition-all duration-500`}>
-                <div className="flex gap-6 sm:gap-8">
-                  <button onClick={() => updateUi({ tab: 'home' })} className={`flex flex-col items-center gap-1 transition-colors ${ui.tab === 'home' ? t.primaryText : t.textM}`}>
-                    <Home className={`w-6 h-6 ${ui.tab === 'home' ? 'fill-current' : ''}`} />
-                    <span className="text-[10px] font-bold">首頁</span>
+              {/* 🌟 導覽列主體 (厚玻璃材質) */}
+              <nav className={`w-full ${ui.isDark ? 'bg-[#202536]/85 border-white/5' : 'bg-white/80 border-white/60'} backdrop-blur-2xl border px-6 py-4 flex justify-between items-center h-[76px] rounded-[2.5rem] shadow-[0_20px_40px_-10px_rgba(0,0,0,0.15)] transition-all duration-500 relative overflow-hidden`}>
+                
+                {/* 導覽列內部頂部打光 */}
+                {!ui.isDark && <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white to-transparent opacity-80"></div>}
+
+                <div className="flex gap-7 sm:gap-10 relative z-10">
+                  <button onClick={() => updateUi({ tab: 'home' })} className={`flex flex-col items-center gap-1.5 transition-all ${ui.tab === 'home' ? `${t.primaryText} scale-110 drop-shadow-sm` : `${t.textM} hover:text-stone-400`}`}>
+                    <Home className={`w-6 h-6 ${ui.tab === 'home' ? 'fill-current' : ''}`} strokeWidth={ui.tab === 'home' ? 2.5 : 2} />
+                    <span className="text-[10px] font-black tracking-wider">首頁</span>
                   </button>
-                  <button onClick={() => updateUi({ tab: 'wallets' })} className={`flex flex-col items-center gap-1 transition-colors ${ui.tab === 'wallets' ? t.primaryText : t.textM}`}>
-                    <Wallet className={`w-6 h-6 ${ui.tab === 'wallets' ? 'fill-current' : ''}`} />
-                    <span className="text-[10px] font-bold">帳戶</span>
+                  <button onClick={() => updateUi({ tab: 'wallets' })} className={`flex flex-col items-center gap-1.5 transition-all ${ui.tab === 'wallets' ? `${t.primaryText} scale-110 drop-shadow-sm` : `${t.textM} hover:text-stone-400`}`}>
+                    <Wallet className={`w-6 h-6 ${ui.tab === 'wallets' ? 'fill-current' : ''}`} strokeWidth={ui.tab === 'wallets' ? 2.5 : 2} />
+                    <span className="text-[10px] font-black tracking-wider">帳戶</span>
                   </button>
                 </div>
-                <div className="w-16 shrink-0"></div> 
-                <div className="flex gap-6 sm:gap-8">
-                  <button onClick={() => updateUi({ tab: 'stats' })} className={`flex flex-col items-center gap-1 transition-colors ${ui.tab === 'stats' ? t.primaryText : t.textM}`}>
-                    <PieChartIcon className={`w-6 h-6 ${ui.tab === 'stats' ? 'fill-current' : ''}`} />
-                    <span className="text-[10px] font-bold">統計</span>
+                
+                {/* 替中間大按鈕預留空間 */}
+                <div className="w-20 shrink-0"></div> 
+                
+                <div className="flex gap-7 sm:gap-10 relative z-10">
+                  <button onClick={() => updateUi({ tab: 'stats' })} className={`flex flex-col items-center gap-1.5 transition-all ${ui.tab === 'stats' ? `${t.primaryText} scale-110 drop-shadow-sm` : `${t.textM} hover:text-stone-400`}`}>
+                    <PieChartIcon className={`w-6 h-6 ${ui.tab === 'stats' ? 'fill-current' : ''}`} strokeWidth={ui.tab === 'stats' ? 2.5 : 2} />
+                    <span className="text-[10px] font-black tracking-wider">統計</span>
                   </button>
-                  <button onClick={() => updateUi({ tab: 'life' })} className={`flex flex-col items-center gap-1 transition-colors ${ui.tab === 'life' ? t.primaryText : t.textM}`}>
-                    <ClipboardList className={`w-6 h-6 ${ui.tab === 'life' ? 'fill-current' : ''}`} />
-                    <span className="text-[10px] font-bold">生活</span>
+                  <button onClick={() => updateUi({ tab: 'life' })} className={`flex flex-col items-center gap-1.5 transition-all ${ui.tab === 'life' ? `${t.primaryText} scale-110 drop-shadow-sm` : `${t.textM} hover:text-stone-400`}`}>
+                    <ClipboardList className={`w-6 h-6 ${ui.tab === 'life' ? 'fill-current' : ''}`} strokeWidth={ui.tab === 'life' ? 2.5 : 2} />
+                    <span className="text-[10px] font-black tracking-wider">生活</span>
                   </button>
                 </div>
               </nav>
@@ -2107,6 +2331,7 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
   const [splitType, setSplitType] = useState(initialData?.splitMode || 'ratio'); // 'ratio' or 'amount'
   const [splitRatio, setSplitRatio] = useState(initialData?.splitRatio?.h || 50);
   const [splitExactH, setSplitExactH] = useState(initialData?.splitExact?.h || '');
+  const [installment, setInstallment] = useState(1); // 🌟 新增分期狀態
 
   const safeTravelCurrencies = settings.travelCurrencies || (settings.travelCurrency ? [{code: settings.travelCurrency, rate: settings.travelRate}] : []);
   const [currency, setCurrency] = useState('TWD');
@@ -2138,52 +2363,16 @@ const TxForm = ({ accounts, cats, tags, initialData, templates, settings, onAI, 
   };
 
 const submit = () => { 
-  let finalAmount = currentTotalAmount;
-  
-  if (!finalAmount || finalAmount <= 0 || isNaN(finalAmount)) {
-     alert("請點擊下方金額區塊輸入有效數字！");
-     setShowK(true);
-     return;
-  }
-
-  // -------------------------------------------------------------
-  // 🌟 記帳時的額度超限檢查
-  // -------------------------------------------------------------
-  if (data.type === 'expense') {
-    const selectedAccount = accounts.find(a => a.id === data.accountId);
-    if (selectedAccount) {
-      const { singleLimit, monthlyLimit, name } = selectedAccount;
-
-      // 1. 單筆超限警示
-      if (singleLimit > 0 && finalAmount > singleLimit) {
-        const confirmSingle = window.confirm(
-          `⚠️ 額度警示：這筆金額 ($${finalAmount.toLocaleString()}) 超過「${name}」設定的單筆上限 ($${singleLimit.toLocaleString()})！\n\n確定仍要記這筆帳嗎？`
-        );
-        if (!confirmSingle) return; // 按取消就停止記帳
-      }
-
-      // 2. 每月總額超限警示
-      if (monthlyLimit > 0) {
-        // 從 ui.mTx 算出這個帳戶本月已經花了多少錢（排除目前正在編輯的這筆帳，避免重複計算）
-        const currentAccMonthlyExp = ui.mTx
-          ? ui.mTx
-              .filter(t => t.accountId === selectedAccount.id && t.type === 'expense' && t.id !== data.id)
-              .reduce((sum, t) => sum + t.amount, 0)
-          : 0;
-
-        const projectedTotal = currentAccMonthlyExp + finalAmount;
-
-        if (projectedTotal > monthlyLimit) {
-          const confirmMonthly = window.confirm(
-            `⚠️ 額度警示：「${name}」本月累積消費將達 $${projectedTotal.toLocaleString()}，超過設定的每月上限 ($${monthlyLimit.toLocaleString()})！\n\n確定仍要記這筆帳嗎？`
-          );
-          if (!confirmMonthly) return; // 按取消就停止記帳
-        }
-      }
+    let finalAmount = currentTotalAmount;
+    
+    if (!finalAmount || finalAmount <= 0 || isNaN(finalAmount)) {
+       alert("請點擊下方金額區塊輸入有效數字！");
+       setShowK(true);
+       return;
     }
-  }
-// -------------------------------------------------------------
-    // 🌟 核心新增：帳戶額度提醒檢查邏輯 (單筆、每月總額)
+
+    // -------------------------------------------------------------
+    // 🌟 帳戶額度提醒檢查邏輯 (單筆、每月總額)
     // -------------------------------------------------------------
     if (data.type === 'expense') {
       const selectedAccount = accounts.find(a => a.id === data.accountId);
@@ -2248,7 +2437,7 @@ const submit = () => {
           }
       }
 
-      onSave({...data, amount: finalAmount, payer: autoPayer, split: finalSplitType, splitMode: finalSplitMode, splitRatio: finalSplitRatio, splitExact: finalSplitExact}); 
+      onSave({...data, amount: finalAmount, payer: autoPayer, split: finalSplitType, splitMode: finalSplitMode, splitRatio: finalSplitRatio, splitExact: finalSplitExact, installment});
     }
   };
   
@@ -2407,8 +2596,21 @@ const submit = () => {
                    <Sparkles className="w-3.5 h-3.5"/> 非必要開銷
                  </button>
                  <button onClick={() => setSplitBill(!splitBill)} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 ${splitBill ? 'border-rose-500 bg-rose-500/10 text-rose-500 shadow-sm' : `${t.border} ${t.bg} ${t.textM} hover:border-rose-500/30`}`}>
-                   <PieChartIcon className="w-3.5 h-3.5"/> 平分花費
+                   <PieChartIcon className="w-3.5 h-3.5"/> 平分
                  </button>
+                 {/* 🌟 只有選到信用卡，才會出現分期選單 */}
+                 {accounts.find(a => a.id === data.accountId)?.isCredit && (
+                   <div className={`flex-1 flex items-center justify-center border ${t.border} rounded-xl ${t.bg} overflow-hidden shadow-sm`}>
+                     <span className={`text-[10px] font-bold ${t.textM} pl-2 pr-1`}>分期</span>
+                     <select value={installment} onChange={e => setInstallment(Number(e.target.value))} className={`w-full bg-transparent outline-none text-xs font-bold cursor-pointer ${installment > 1 ? 'text-indigo-500' : t.textM} py-2`}>
+                        <option value="1">無</option>
+                        <option value="3">3 期</option>
+                        <option value="6">6 期</option>
+                        <option value="12">12 期</option>
+                        <option value="24">24 期</option>
+                     </select>
+                   </div>
+                 )}
               </div>
             )}
 
@@ -3009,32 +3211,55 @@ const RecurringForm = ({ rules, accounts, cats, onSave, onDelete, onBack, t }) =
 
 const AccForm = ({ onSave, initialData, t }) => {
   const [n, setN] = useState(initialData?.name || ''); 
-  const [i, setI] = useState(initialData?.icon || '🏦');
+  const [i, setI] = useState(initialData?.icon || '💳');
   const [budget, setBudget] = useState(initialData?.budget || ''); 
   const [singleLimit, setSingleLimit] = useState(initialData?.singleLimit || '');
   const [monthlyLimit, setMonthlyLimit] = useState(initialData?.monthlyLimit || '');
   const [isUntouchable, setIsUntouchable] = useState(initialData?.isUntouchable || false);
   
+  // 🌟 新增信用卡專屬設定
+  const [isCredit, setIsCredit] = useState(initialData?.isCredit || false);
+  const [billingDay, setBillingDay] = useState(initialData?.billingDay || '');
+  const [paymentDay, setPaymentDay] = useState(initialData?.paymentDay || '');
+
   return (
     <div className="space-y-6 pb-8 pt-4">
-      <div className="space-y-2">
-        <label className={`text-xs font-bold ${t.textM} px-2`}>帳戶名稱</label>
-        <input value={n} onChange={e => setN(e.target.value)} placeholder="例如：中信戶頭" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring} shadow-inner transition-all`} />
+      <div className={`flex ${t.bg} p-1.5 rounded-2xl shadow-sm mb-2`}>
+        <button onClick={() => setIsCredit(false)} className={`flex-1 py-2 text-sm font-bold rounded-xl transition-all ${!isCredit ? `${t.cardInner} shadow-md ${t.text}` : t.textM}`}>一般帳戶</button>
+        <button onClick={() => setIsCredit(true)} className={`flex-1 py-2 text-sm font-bold rounded-xl transition-all ${isCredit ? `${t.cardInner} shadow-md ${t.text}` : t.textM}`}>💳 信用卡</button>
       </div>
 
-      {/* 🌟 帳戶專屬初始總預算 */}
       <div className="space-y-2">
-        <label className={`text-xs font-bold ${t.textM} px-2`}>此帳戶每月初始總預算 ($)</label>
-        <input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="例如：30000" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring} shadow-inner transition-all`} />
+        <label className={`text-xs font-bold ${t.textM} px-2`}>{isCredit ? '卡片名稱' : '帳戶名稱'}</label>
+        <input value={n} onChange={e => setN(e.target.value)} placeholder={isCredit ? "例如：國泰CUBE卡" : "例如：中信戶頭"} className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring} shadow-inner transition-all`} />
       </div>
 
-      <div className={`flex justify-between items-center p-4 rounded-xl border ${t.border} ${t.bg} shadow-sm`}>
-        <div>
-           <p className={`font-bold text-sm ${t.text}`}>設為「不可動用資金」</p>
-           <p className={`text-xs ${t.textM} mt-1`}>開啟後，此帳戶金額將不計入可使用資金</p>
+      {!isCredit ? (
+        <>
+          <div className="space-y-2">
+            <label className={`text-xs font-bold ${t.textM} px-2`}>此帳戶每月初始總預算 ($)</label>
+            <input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="例如：30000" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring} shadow-inner transition-all`} />
+          </div>
+          <div className={`flex justify-between items-center p-4 rounded-xl border ${t.border} ${t.bg} shadow-sm`}>
+            <div>
+               <p className={`font-bold text-sm ${t.text}`}>設為「不可動用資金」</p>
+               <p className={`text-xs ${t.textM} mt-1`}>開啟後，金額不計入可用資金</p>
+            </div>
+            <ToggleSwitch checked={isUntouchable} onChange={setIsUntouchable} isDark={t.bg.includes('16')} />
+          </div>
+        </>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className={`text-xs font-bold ${t.textM} px-2`}>每月結帳日</label>
+            <input type="number" min="1" max="31" value={billingDay} onChange={e => setBillingDay(e.target.value)} placeholder="如: 5" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring}`} />
+          </div>
+          <div className="space-y-2">
+            <label className={`text-xs font-bold ${t.textM} px-2`}>每月繳款日</label>
+            <input type="number" min="1" max="31" value={paymentDay} onChange={e => setPaymentDay(e.target.value)} placeholder="如: 20" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring}`} />
+          </div>
         </div>
-        <ToggleSwitch checked={isUntouchable} onChange={setIsUntouchable} isDark={t.bg.includes('16')} />
-      </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -3042,21 +3267,21 @@ const AccForm = ({ onSave, initialData, t }) => {
           <input type="number" value={singleLimit} onChange={e => setSingleLimit(e.target.value)} placeholder="不限制" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring}`} />
         </div>
         <div className="space-y-2">
-          <label className={`text-xs font-bold ${t.textM} px-2`}>每月累積上限 ($)</label>
+          <label className={`text-xs font-bold ${t.textM} px-2`}>{isCredit ? '信用卡額度' : '每月累積上限'} ($)</label>
           <input type="number" value={monthlyLimit} onChange={e => setMonthlyLimit(e.target.value)} placeholder="不限制" className={`w-full p-4 rounded-xl font-bold text-base ${t.bg} border ${t.border} outline-none focus:ring-2 ${t.ring}`} />
         </div>
       </div>
 
       <div className="space-y-2">
-        <label className={`text-xs font-bold ${t.textM} px-2`}>帳戶圖示</label>
+        <label className={`text-xs font-bold ${t.textM} px-2`}>圖示</label>
         <div className="flex gap-2 text-3xl overflow-x-auto py-2 hide-scrollbar">
-          {['🏦','💳','💼','💎', '🐖', '🪙', '📈', '🏠'].map(x => (
+          {['💳','🏦','💼','💎', '✈️', '🪙', '🛍️', '🍎'].map(x => (
             <button key={x} type="button" onClick={() => setI(x)} className={`p-4 border rounded-2xl shrink-0 transition-all ${i === x ? `${t.primaryText} ${t.bg} border-transparent shadow-md scale-105` : `${t.border} ${t.cardInner}`}`}>{x}</button>
           ))}
         </div>
       </div>
 
-      <button type="button" onClick={() => onSave({ id: initialData?.id, name: n, type: initialData?.type || 'joint', icon: i, balance: initialData?.balance || 0, budget: budget !== '' ? Number(budget) : 0, singleLimit: singleLimit !== '' ? Number(singleLimit) : 0, monthlyLimit: monthlyLimit !== '' ? Number(monthlyLimit) : 0, isUntouchable })} disabled={!n} className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all`}>
+      <button type="button" onClick={() => onSave({ id: initialData?.id, name: n, type: initialData?.type || 'joint', icon: i, balance: initialData?.balance || 0, budget: budget !== '' ? Number(budget) : 0, singleLimit: singleLimit !== '' ? Number(singleLimit) : 0, monthlyLimit: monthlyLimit !== '' ? Number(monthlyLimit) : 0, isUntouchable: !isCredit ? isUntouchable : false, isCredit, billingDay: Number(billingDay)||'', paymentDay: Number(paymentDay)||'' })} disabled={!n} className={`w-full py-5 rounded-[1.5rem] font-bold text-lg text-white shadow-lg ${t.primary} disabled:opacity-50 mt-4 active:scale-95 transition-all`}>
         {initialData ? '儲存修改' : '建立帳戶'}
       </button>
     </div>
