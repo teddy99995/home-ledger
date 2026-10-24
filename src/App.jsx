@@ -1706,7 +1706,7 @@ export default function App() {
                       </React.Fragment>
                     ))}
                   </div>
-                   </div>
+                </div>
 
                 <div className={`${t.cardInner} rounded-[2.5rem] p-7 border ${t.border} shadow-sm`}>
                   <h3 className="font-extrabold text-lg mb-6 flex items-center gap-2"><ArrowRightLeft className="w-6 h-6 text-indigo-500"/> {ui.statsView === 'month' ? '本月' : ui.statsView === 'year' ? '年度' : '區間'}代墊結算</h3>
@@ -2944,7 +2944,7 @@ const CategoryForm = ({ categories, onSave, onBack, t }) => {
                    <span className="text-2xl drop-shadow-sm">{c.icon}</span>
                    <span className="font-bold text-sm group-hover:text-indigo-500 transition-colors">{c.name}</span>
                 </div>
-                <Trash2 onClick={() => handleRemove(c.name)} className="w-5 h-5 text-stone-400 hover:text-red-500 cursor-pointer transition-colors" />
+                <Trash2 onClick={() => handleRemove(c.name)} className={`w-5 h-5 text-stone-400 hover:text-red-500 cursor-pointer transition-colors`} />
              </div>
            ))}
          </div>
